@@ -178,12 +178,24 @@ function revisionRender(){
  const todayItems=orderedRevision([...scheduled,...newOnes].slice(0,maxTotal));
  $("revDue").textContent=due.length;$("revToday").textContent=todayItems.length;$("revNew").textContent=Math.min(maxNew,newOnes.length);$("revOverdue").textContent=over.length;
  const groups=revisionGroups(todayItems);$("revisionQueue").innerHTML=groups.length?groups.map(g=>groupHTML(g)).join(""):"<p class='muted'>Nothing due today.</p>";
- $("revisionPreview").innerHTML=revisionGroups(all.slice(0,30)).map(g=>groupHTML(g,true)).join("")||"<p class='muted'>No revision items yet.</p>";
+ $("revisionPreview").innerHTML=revisionGroups(all.slice(0,5)).map(g=>groupHTML(g,true)).join("")||"<p class='muted'>No revision items yet.</p>";
 }
 function groupHTML(g,preview=false){
- const count=g.items.length;const cycle=Math.max(...g.items.map(x=>x.cycle||0));
- return `<div class="revision-group"><h4>${esc(g.h)} <span class="tag">${count} topic${count===1?"":"s"}</span></h4><p>${esc(g.s)} · ${g.due}${g.items.some(x=>x.newItem)?" · New":` · R${cycle}`} · Difficulty: ${esc(g.items[0].difficulty||"good")}</p>${preview?"":`<div class="actions"><button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="forgot">Forgot</button><button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="good">Good</button><button class="primary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="easy">Easy</button></div>`}</div>`;
+ const count=g.items.length;
+ const diff=g.items[0]?.difficulty||"new";
+ const topics=g.items.slice(0,5).map(x=>`<div class="revision-topic"><span class="revision-topic-name">${esc(x.t.title)}</span><span class="tag">${esc(x.difficulty||"new")}</span></div>`).join("");
+ return `<div class="revision-group">
+   <h4>${esc(g.h)} <span class="tag">${count} topic${count===1?"":"s"}</span></h4>
+   <p>${esc(g.s)} · ${g.due} · Difficulty: ${esc(diff)}</p>
+   <div class="revision-topics">${topics}</div>
+   ${preview?"":`<div class="actions">
+      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="forgot">Forgot</button>
+      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="good">Good</button>
+      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="easy">Easy</button>
+   </div>`}
+ </div>`;
 }
+
 document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const ks=b.dataset.group.split("~~~"),action=b.dataset.action;ks.forEach(k=>{const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let c=h.cycle||0;if(action==="forgot")c=0;else c=Math.min(c+1,intervals.length-1);h.cycle=c;h.difficulty=action;h.next=shift(today(),intervals[c]||1);state.revision.history[k]=h});save();renderAll()});
 
 function populateAdmin(){
