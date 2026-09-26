@@ -42,7 +42,7 @@
 <button id="saveGoal" class="primary">Set today's target</button></div>
 <div class="card"><h3>Progress</h3><div id="goalBig" class="big">0 / 0</div><div class="bar"><i id="goalBar"></i></div><div id="goalBreakdown"></div><p id="goalText"></p></div>
 </div>
-<div class="card"><h3>Today + backlog</h3><div id="todayList"></div></div>
+
 </section>
 
 <section id="revision" class="page">
@@ -75,7 +75,10 @@
 <div class="settings-grid">
 <label>New revision topics per day<input id="newPerDay" type="number" min="1" step="1"></label>
 <label>Total revision topics per day<input id="totalPerDay" type="number" min="1" step="1"></label>
-<label>Intervals (days, comma separated)<input id="intervals" placeholder="1,3,7,14,30,60,120"></label>
+<label>Legacy/default intervals<input id="intervals" placeholder="1,3,7,14,30,60,120"></label>
+<label>Forgot intervals<input id="forgotIntervals" placeholder="1,2,4"></label>
+<label>Good intervals<input id="goodIntervals" placeholder="3,7,14,30,60,120"></label>
+<label>Easy intervals<input id="easyIntervals" placeholder="7,14,30,60,120,180"></label>
 </div>
 <button id="saveSettings" class="primary">Save revision settings</button></div>
 
