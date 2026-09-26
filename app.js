@@ -16,8 +16,11 @@ const defaults={
 };
 let state=structuredClone(defaults);
 try{const s=JSON.parse(localStorage.getItem(STORE)||"null");if(s)state={...defaults,...s,custom:{...defaults.custom,...(s.custom||{})},revision:{...defaults.revision,...(s.revision||{}),settings:{...defaults.revision.settings,...((s.revision||{}).settings||{}),difficultyIntervals:{...defaults.revision.settings.difficultyIntervals,...(((s.revision||{}).settings||{}).difficultyIntervals||{})}}}}}catch(e){}
+state.simulatedDate??=null;
 state.done??={};state.completionDates??={};state.custom??={added:[],removed:[]};state.custom.added??=[];state.custom.removed??=[];
 state.revision??=structuredClone(defaults.revision);state.revision.history??={};state.revision.eligibility??={};state.revision.manualQueue??=[];
+state.revision.settings??={newPerDay:5,totalPerDay:15,intervals:[1,3,7,14,30,60,120]};
+state.revision.settings.difficultyIntervals??={forgot:[1,2,4],good:[3,7,14,30,60,120],easy:[7,14,30,60,120,180]};
 function save(){localStorage.setItem(STORE,JSON.stringify(state))}
 function allTopics(){
  const a=[];
@@ -27,7 +30,8 @@ function allTopics(){
 }
 function find(k){return allTopics().find(x=>x.k===k)}
 function completedCount(){return allTopics().filter(x=>state.done[x.k]).length}
-function today(){return iso(new Date())}
+function realToday(){return iso(new Date())}
+function today(){return state.simulatedDate||realToday()}
 function ensureToday(){
  const t=today();
  if(state.goalDate===t)return;
@@ -232,19 +236,38 @@ $("exportData").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],
 $("importData").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=="object")throw Error();state={...defaults,...x,custom:{...defaults.custom,...(x.custom||{})},revision:{...defaults.revision,...(x.revision||{}),settings:{...defaults.revision.settings,...((x.revision||{}).settings||{})}}};save();renderAll();alert("Tracker data imported. Built-in syllabus was not replaced.")}catch(err){alert("Invalid backup file.")}e.target.value=""};
 
 $("simulateDay").onclick=()=>{
+ const current=today();
  const unfinished=Math.max(0,Number(state.todayTarget||0)-Number(state.completedGoal||0));
+
+ // Only today's uncompleted NEW target becomes backlog.
+ // Existing backlog is never re-added to itself.
  state.backlog=Number(state.backlog||0)+unfinished;
- state.goalDate=shift(today(),1);
+
+ const next=shift(current,1);
+ state.simulatedDate=next;
+ state.goalDate=next;
  state.targetSet=false;
  state.todayTarget=0;
- state.goalTotal=0;
+ state.goalTotal=Number(state.backlog||0);
  state.completedGoal=0;
  state.selectionQuota=0;
  state.selectedTopics=[];
  save();
  renderAll();
 };
-$("resetProgress").onclick=()=>{if(!confirm("Reset study completion, daily target and backlog? Revision history and syllabus edits will stay."))return;state.done={};state.completionDates={};state.goalDate=today();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();renderAll()};
+$("exitSimulation").onclick=()=>{
+ state.simulatedDate=null;
+ state.goalDate=realToday();
+ state.targetSet=false;
+ state.todayTarget=0;
+ state.goalTotal=Number(state.backlog||0);
+ state.completedGoal=0;
+ state.selectionQuota=0;
+ state.selectedTopics=[];
+ save();
+ renderAll();
+};
+$("resetProgress").onclick=()=>{if(!confirm("Reset study completion, daily target and backlog? Revision history and syllabus edits will stay."))return;state.done={};state.completionDates={};state.simulatedDate=null;state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();renderAll()};
 $("restoreSyllabus").onclick=()=>{if(!confirm("Restore original syllabus and remove permanent topic edits? Study and revision data will remain."))return;state.custom={added:[],removed:[]};save();renderAll()};
 
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
