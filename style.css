@@ -6,3 +6,14 @@ nav{display:flex;gap:7px;overflow:auto;margin-bottom:14px}button{border:1px soli
 .subject{background:#fff;border:1px solid #e2e6ed;border-radius:17px;overflow:hidden;margin-bottom:9px}summary{list-style:none;cursor:pointer;padding:16px;font-weight:750;display:flex;justify-content:space-between}summary::-webkit-details-marker{display:none}.meta{font-size:12px;color:#6d7687;font-weight:500}.body{border-top:1px solid #e2e6ed;padding:0 16px 16px}.section{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6d7687;font-weight:800;padding:17px 2px 6px}.topic{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid #eef0f4;cursor:pointer}.topic input{width:21px;height:21px;accent-color:#2f7d55}.topic input:checked~span{text-decoration:line-through;color:#8992a2}.topic-name{flex:1;font-size:15px}.duration{font-size:12px;color:#6d7687;white-space:nowrap}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{margin-bottom:12px}.card h3{margin:0 0 8px}.card p{font-size:12px;color:#6d7687;line-height:1.5}.card label{display:block;font-size:12px;font-weight:700;color:#6d7687;margin:10px 0 5px}.card input,.card select{margin-bottom:8px}.big{font-size:38px;font-weight:800;margin:16px 0}.bar{height:7px;background:#edf0f4;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#2f7d55}.clock{font-size:46px;font-weight:800;margin:18px 0}.item{padding:11px 0;border-bottom:1px solid #e9ecf1;display:flex;justify-content:space-between;gap:8px}.notice{background:#fff8e7;border:1px solid #ead8a7;border-radius:13px;padding:12px;font-size:12px;line-height:1.5;margin-bottom:12px}.danger{color:#b43b3b}.empty{padding:30px;text-align:center;color:#6d7687}
 @media(max-width:800px){main{padding:16px 12px 45px}.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}}
+
+input:disabled{background:#f0f2f5;color:#7a8290;opacity:1}.item b{font-weight:800}
+
+.complete-panel{background:#fff;border:1px solid #e2e6ed;border-radius:17px;padding:12px;margin-bottom:11px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.complete-panel select{width:auto;min-width:210px;flex:0 1 260px}
+.complete-panel span{font-size:12px;color:#6d7687}
+.topic.completed{background:#eaf7ee;border-radius:8px}
+.topic.completed .topic-name{color:#23733f;font-weight:700}
+.topic.selected{outline:2px solid #23733f;background:#f0faf3;border-radius:8px}
+.topic.locked{opacity:.55;cursor:not-allowed}
+.topic.completed input{accent-color:#23733f}

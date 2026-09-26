@@ -15,19 +15,22 @@
 <section class="stats">
 <div class="stat"><span>Overall</span><b id="overall">0%</b></div>
 <div class="stat"><span>Completed</span><b id="completed">0</b></div>
-<div class="stat"><span>Today's goal</span><b id="goalStat">0 / 0</b></div>
-<div class="stat"><span>Study time</span><b id="timeStat">0h 0m</b></div>
+<div class="stat"><span>Today + backlog</span><b id="goalStat">0 / 0</b></div>
+
 </section>
 <nav id="nav">
 <button data-page="subjects" class="active">Subjects</button>
 <button data-page="goals">Daily Goal</button>
-<button data-page="timer">Study Timer</button>
-<button data-page="history">History</button>
 <button data-page="admin">Admin</button>
 </nav>
 
 <section id="subjects" class="page active">
 <input id="search" placeholder="Search subjects, headers or topics…">
+<div class="complete-panel">
+  <button id="completeBtn" class="primary">Complete</button>
+  <select id="completeCount" disabled><option value="">Select number of topics</option></select>
+  <span id="selectionStatus">No active completion selection.</span>
+</div>
 <div id="subjectList"></div>
 </section>
 
@@ -38,22 +41,15 @@
 <button id="saveGoal" class="primary">Save target</button>
 <button id="clearGoal">Clear</button></div>
 <div class="card"><h3>Progress</h3><div id="goalBig" class="big">0 / 0</div><div class="bar"><i id="goalBar"></i></div>
-<p id="goalText"></p></div>
+<div id="goalBreakdown"></div><p id="goalText"></p></div>
 </div>
-<div class="card"><h3>Today's topics</h3><div id="todayList"></div></div>
+<div class="card"><h3>Today’s target & backlog</h3><div id="todayList"></div></div>
 </section>
 
-<section id="timer" class="page">
-<div class="card"><h3>Study timer</h3><select id="timerTopic"></select>
-<div id="clock" class="clock">00:00:00</div>
-<button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="stop">Stop & Save</button>
-<p id="timerStatus">Ready.</p></div>
-</section>
 
-<section id="history" class="page"><div class="card"><h3>Study history</h3><div id="historyList">No sessions yet.</div></div></section>
 
 <section id="admin" class="page">
-<div class="notice"><b>Temporary admin tools.</b> Topic edits are stored separately from progress. Resetting progress will not delete topic edits.</div>
+<div class="notice"><b>Temporary admin tools.</b> Topic edits are stored separately from study progress. The daily-goal system automatically rolls unfinished targets into backlog at the start of the next day.</div>
 <div class="grid">
 <div class="card"><h3>Add topic permanently</h3>
 <label>Subject</label><select id="addSubject"></select>
