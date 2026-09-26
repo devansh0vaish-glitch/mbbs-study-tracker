@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MBBS Study Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • Topic tracking • Daily goals</p></div></div></header>
+<main>
+<section class="hero"><h2>Study dashboard</h2><p>Plan your day and track your MBBS syllabus.</p></section>
+<section class="stats">
+<div class="stat"><span>Overall</span><b id="overall">0%</b></div>
+<div class="stat"><span>Completed</span><b id="completed">0</b></div>
+<div class="stat"><span>Today's goal</span><b id="goalStat">0 / 0</b></div>
+<div class="stat"><span>Study time</span><b id="timeStat">0h 0m</b></div>
+</section>
+<nav id="nav">
+<button data-page="subjects" class="active">Subjects</button>
+<button data-page="goals">Daily Goal</button>
+<button data-page="timer">Study Timer</button>
+<button data-page="history">History</button>
+<button data-page="admin">Admin</button>
+</nav>
+
+<section id="subjects" class="page active">
+<input id="search" placeholder="Search subjects, headers or topics…">
+<div id="subjectList"></div>
+</section>
+
+<section id="goals" class="page">
+<div class="grid">
+<div class="card"><h3>Today's target</h3><p>Set the number of topics you want to complete today.</p>
+<input id="goalInput" type="number" min="0" step="1" placeholder="Topics per day">
+<button id="saveGoal" class="primary">Save target</button>
+<button id="clearGoal">Clear</button></div>
+<div class="card"><h3>Progress</h3><div id="goalBig" class="big">0 / 0</div><div class="bar"><i id="goalBar"></i></div>
+<p id="goalText"></p></div>
+</div>
+<div class="card"><h3>Today's topics</h3><div id="todayList"></div></div>
+</section>
+
+<section id="timer" class="page">
+<div class="card"><h3>Study timer</h3><select id="timerTopic"></select>
+<div id="clock" class="clock">00:00:00</div>
+<button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="stop">Stop & Save</button>
+<p id="timerStatus">Ready.</p></div>
+</section>
+
+<section id="history" class="page"><div class="card"><h3>Study history</h3><div id="historyList">No sessions yet.</div></div></section>
+
+<section id="admin" class="page">
+<div class="notice"><b>Temporary admin tools.</b> Topic edits are stored separately from progress. Resetting progress will not delete topic edits.</div>
+<div class="grid">
+<div class="card"><h3>Add topic permanently</h3>
+<label>Subject</label><select id="addSubject"></select>
+<label>Header</label><input id="addHeader" placeholder="e.g. Cardiology">
+<label>Topic</label><input id="addTopic" placeholder="Topic name">
+<label>Duration</label><input id="addDuration" placeholder="Optional">
+<button id="addTopicBtn" class="primary">Add topic</button></div>
+<div class="card"><h3>Remove topic</h3>
+<label>Subject</label><select id="removeSubject"></select>
+<label>Search</label><input id="removeSearch" placeholder="Search topic">
+<div id="removeList"></div></div>
+</div>
+<div class="card"><h3>Reset</h3><p><b>Reset progress</b> clears study data but keeps topic edits.</p>
+<button id="resetProgress" class="danger">Reset progress</button>
+<button id="restoreSyllabus" class="danger">Restore original syllabus</button></div>
+</section>
+</main>
+<script src="syllabus.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
