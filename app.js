@@ -34,14 +34,23 @@ async function saveMaster(){
  const {error}=await supabaseClient.from("master_syllabus").update({syllabus:BASE,version:Date.now(),updated_by:cloudSession.user.email,updated_at:new Date().toISOString()}).eq("id",1);
  if(error){alert("Could not save master syllabus: "+error.message);return false} return true;
 }
+function headerOrder(s){
+ const headers=Object.keys(BASE[s]||{});
+ return headers.sort((a,b)=>{
+   const an=(BASE[s][a]||[]).reduce((m,t)=>Math.min(m,Number.isFinite(Number(t.n))?Number(t.n):Infinity),Infinity);
+   const bn=(BASE[s][b]||[]).reduce((m,t)=>Math.min(m,Number.isFinite(Number(t.n))?Number(t.n):Infinity),Infinity);
+   if(an!==bn)return an-bn;
+   return headers.indexOf(a)-headers.indexOf(b);
+ });
+}
 function subjectTopics(s){
  const out=[];
- Object.keys(BASE[s]||{}).forEach((h,hi)=>{(BASE[s][h]||[]).forEach((t,ti)=>out.push({h,hi,ti,t}));});
+ headerOrder(s).forEach((h,hi)=>{(BASE[s][h]||[]).forEach((t,ti)=>out.push({h,hi,ti,t}));});
  return out;
 }
 function renumberSubject(s){
  let n=1;
- Object.keys(BASE[s]||{}).forEach(h=>(BASE[s][h]||[]).forEach(t=>{t.n=n++;}));
+ headerOrder(s).forEach(h=>(BASE[s][h]||[]).forEach(t=>{t.n=n++;}));
 }
 function renderAdminSyllabus(){
  if(!isAdmin)return;
@@ -50,7 +59,7 @@ function renderAdminSyllabus(){
  ss.innerHTML=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
  if(prevSubject && SUBJECTS.includes(prevSubject)) ss.value=prevSubject;
  const s=ss.value||SUBJECTS[0];
- hs.innerHTML=Object.keys(BASE[s]||{}).map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join("");
+ hs.innerHTML=headerOrder(s).map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join("");
  if(prevHeader && Object.prototype.hasOwnProperty.call(BASE[s]||{},prevHeader)) hs.value=prevHeader;
  const h=hs.value; const list=$("adminSyllabusList"); if(!list)return; list.innerHTML="";
  const arr=BASE[s]?.[h]||[];
@@ -85,7 +94,7 @@ function renderAdminSyllabus(){
 }
 async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);await loadGlobalState(); const hasCloud=state._skipCloudPullOnce?false:await pullCloud(); state._skipCloudPullOnce=false;if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
 async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else setCloudStatus("Cloud: signed out");supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else{cloudSession=null;document.getElementById("authOverlay")?.classList.remove("hidden");setCloudStatus("Cloud: signed out")}})}
-async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
+async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:"https://devansh0vaish-glitch.github.io/mbbs-study-tracker/"}}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
 let BASE=window.MBBS_SYLLABUS;
 if(!BASE){document.body.innerHTML="<main><h2>Syllabus failed to load.</h2></main>";return;}
 let SUBJECTS=Object.keys(BASE), STORE="MBBS_STUDY_TRACKER_V9";
@@ -173,7 +182,9 @@ function renderSubjects(){
   const body=document.createElement("div"); body.className="body";
   const groups={};
   vis.forEach(x=>{(groups[x.h]??=[]).push(x)});
-  Object.entries(groups).forEach(([h,arr])=>{
+  headerOrder(s).forEach(h=>{
+    const arr=groups[h];
+    if(!arr||!arr.length)return;
     const hd=document.createElement("div"); hd.className="section"; hd.textContent=h; body.appendChild(hd);
     arr.forEach(x=>{
       const done=!!state.done[x.k], pick=selected.has(x.k);
@@ -181,7 +192,7 @@ function renderSubjects(){
       row.className="topic"+(done?" completed":"")+(pick?" selected":"");
       if(active&&!done){
         row.classList.add("selectable");
-        row.innerHTML=`<input type="checkbox" ${pick?"checked":""}><span class="topic-name">${esc(x.t.title)}</span><span class="duration">${esc(x.t.duration||"")}</span>`;
+        row.innerHTML=`<input type="checkbox" ${pick?"checked":""}><span class="serial-number">${esc(x.t.n ?? "")}</span><span class="topic-name">${esc(x.t.title)}</span><span class="duration">${esc(x.t.duration||"")}</span>`;
         row.querySelector("input").onchange=e=>{
           if(e.target.checked){
             if(state.selectedTopics.length>=state.selectionQuota){e.target.checked=false;return}
@@ -196,7 +207,7 @@ function renderSubjects(){
         };
       }else{
         row.innerHTML=(done?'<span class="done-mark">✓</span>':'<span class="empty-mark"></span>')+
-          `<span class="topic-name">${esc(x.t.title)}</span><span class="duration">${esc(x.t.duration||"")}</span>`;
+          `<span class="serial-number">${esc(x.t.n ?? "")}</span><span class="topic-name">${esc(x.t.title)}</span><span class="duration">${esc(x.t.duration||"")}</span>`;
       }
       body.appendChild(row);
     });
@@ -293,7 +304,7 @@ function populateAdmin(){
  $("goodIntervals").value=(state.revision.settings.difficultyIntervals?.good||[3,7,14,30,60,120]).join(",");
  $("easyIntervals").value=(state.revision.settings.difficultyIntervals?.easy||[7,14,30,60,120,180]).join(",");
  const opts=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
- ["bulkSubject","eligSubject"].forEach(id=>{if($(id))$(id).innerHTML=opts});
+ ["bulkSubject","eligSubject"].forEach(id=>{if($(id)){const old=$(id).value;$(id).innerHTML=opts;if(SUBJECTS.includes(old))$(id).value=old;}});
 }
 function renderRemove(){}
 const bulkSelected=new Set();
@@ -337,7 +348,16 @@ $("resetProgress").onclick=async()=>{if(!isAdmin)return;if(!confirm("Reset study
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
 function renderRevision(){revisionRender()}
 function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();if($("selectSyllabus")){ $("selectSyllabus").value=localStorage.getItem("MBBS_SELECTED_SYLLABUS")||"mbbs"; $("syllabusSelectionStatus").textContent="Using the current master syllabus."; }renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
-$("adminSubject")?.addEventListener("change",()=>{renderAdminSyllabus();});$("adminHeader")?.addEventListener("change",renderAdminSyllabus);$("selectSyllabus")?.addEventListener("change",e=>{localStorage.setItem("MBBS_SELECTED_SYLLABUS",e.target.value);renderAll();});$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
+$("adminSubject")?.addEventListener("change",()=>{renderAdminSyllabus();});$("adminHeader")?.addEventListener("change",renderAdminSyllabus);
+$("adminRemoveSubject")?.addEventListener("click",async()=>{
+ const subject=$("adminSubject").value;
+ if(!subject)return;
+ if(SUBJECTS.length<=1){alert("At least one subject must remain.");return;}
+ if(!confirm(`Remove the entire subject "${subject}" and all of its topics from the master syllabus? This affects all users.`))return;
+ delete BASE[subject];
+ refreshSubjects();
+ if(await saveMaster())renderAll();
+});$("selectSyllabus")?.addEventListener("change",e=>{localStorage.setItem("MBBS_SELECTED_SYLLABUS",e.target.value);renderAll();});$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
 $("syncNow").onclick=async()=>{await loadGlobalState();const skip=state._skipCloudPullOnce;state._skipCloudPullOnce=false;if(!skip)await pullCloud();else await pushCloud();renderAll();setCloudStatus("Cloud: synced","ok")};
 cloudEl("signInBtn").onclick=()=>authAction("signin");
 cloudEl("signUpBtn").onclick=()=>authAction("signup");
