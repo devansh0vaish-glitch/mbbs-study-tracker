@@ -7,8 +7,11 @@
 <meta name="theme-color" content="#111827">
 <title>MBBS Study Tracker</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+<div id="authOverlay" class="auth-overlay">
+<div class="auth-card"><h2>MBBS Study Tracker</h2><p id="authStatus">Sign in to enable cloud sync.</p><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Password"><div class="row"><button id="signInBtn" class="primary">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div><p id="authMsg" class="muted"></p></div></div>
 <header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • syllabus + goals + revision</p></div></div></header>
 <main>
 <section class="stats">
@@ -17,6 +20,7 @@
 <div class="stat"><span>Study progress</span><b id="goalStat">0 / 0</b></div>
 <div class="stat"><span>Revision due</span><b id="revisionStat">0</b></div>
 </section>
+<div class="cloudbar"><span id="cloudStatus">Cloud: signed out</span><button id="syncNow" class="secondary">Sync now</button><button id="signOutBtn" class="secondary">Sign out</button></div>
 <nav id="nav">
 <button data-page="subjects" class="active">Subjects</button>
 <button data-page="goals">Daily Goal</button>

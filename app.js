@@ -1,5 +1,18 @@
 (() => {
 "use strict";
+const SUPABASE_URL="https://rnjmgtttujzfjonvnaae.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY="sb_publishable_RLUAXbbmn9y6p-OesKr8Ow_LEyBBgVo";
+const supabaseClient=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let cloudSession=null, cloudTimer=null, cloudBusy=false, cloudDirty=false;
+const cloudEl=id=>document.getElementById(id);
+function setCloudStatus(text,kind=""){const e=cloudEl("cloudStatus");if(!e)return;e.textContent=text;e.className=kind?`cloud-${kind}`:"";}
+function meaningfulLocalData(){return Object.keys(state.done||{}).length||Object.keys(state.completionDates||{}).length||Object.keys(state.revision?.history||{}).length||state.todayTarget||state.backlog||state.custom?.added?.length||state.custom?.removed?.length;}
+async function pushCloud(){if(!supabaseClient||!cloudSession){return} if(cloudBusy){cloudDirty=true;return} cloudBusy=true;cloudDirty=false;setCloudStatus("Cloud: syncing…");try{const {error}=await supabaseClient.from("user_tracker_data").upsert({user_id:cloudSession.user.id,data:state,schema_version:1,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error)throw error;setCloudStatus("Cloud: synced","ok")}catch(e){console.error(e);setCloudStatus("Cloud: sync failed","error")}finally{cloudBusy=false;if(cloudDirty)queueCloudSync()}}
+function queueCloudSync(){if(!cloudSession)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(pushCloud,700)}
+async function pullCloud(){if(!cloudSession)return false;setCloudStatus("Cloud: loading…");const {data,error}=await supabaseClient.from("user_tracker_data").select("data,updated_at").eq("user_id",cloudSession.user.id).maybeSingle();if(error){setCloudStatus("Cloud: load failed","error");throw error}if(data?.data){localStorage.setItem(STORE,JSON.stringify(data.data));state={...defaults,...data.data,custom:{...defaults.custom,...(data.data.custom||{})},revision:{...defaults.revision,...(data.data.revision||{}),settings:{...defaults.revision.settings,...((data.data.revision||{}).settings||{})}}};return true}return false}
+async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);const hasCloud=await pullCloud();if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
+async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else setCloudStatus("Cloud: signed out");supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else{cloudSession=null;document.getElementById("authOverlay")?.classList.remove("hidden");setCloudStatus("Cloud: signed out")}})}
+async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
 const BASE=window.MBBS_SYLLABUS;
 if(!BASE){document.body.innerHTML="<main><h2>Syllabus failed to load.</h2></main>";return;}
 const SUBJECTS=Object.keys(BASE), STORE="MBBS_STUDY_TRACKER_V9";
@@ -21,7 +34,7 @@ state.done??={};state.completionDates??={};state.custom??={added:[],removed:[]};
 state.revision??=structuredClone(defaults.revision);state.revision.history??={};state.revision.eligibility??={};state.revision.manualQueue??=[];
 state.revision.settings??={newPerDay:5,totalPerDay:15,intervals:[1,3,7,14,30,60,120]};
 state.revision.settings.difficultyIntervals??={forgot:[1,2,4],good:[3,7,14,30,60,120],easy:[7,14,30,60,120,180]};
-function save(){localStorage.setItem(STORE,JSON.stringify(state))}
+function save(){localStorage.setItem(STORE,JSON.stringify(state));queueCloudSync()}
 function allTopics(){
  const a=[];
  SUBJECTS.forEach((s,si)=>Object.entries(BASE[s]||{}).forEach(([h,arr],hi)=>arr.forEach((t,ti)=>{const k=key(s,h,t.title);if(!state.custom.removed.includes(k))a.push({s,h,t,k,si,hi,ti})})));
@@ -285,5 +298,10 @@ $("restoreSyllabus").onclick=()=>{if(!confirm("Restore original syllabus and rem
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
 function renderRevision(){revisionRender()}
 function renderAll(){ensureToday();populateAdmin();renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove();renderBulk();renderEligibility()}
+cloudEl("signInBtn").onclick=()=>authAction("signin");
+cloudEl("signUpBtn").onclick=()=>authAction("signup");
+cloudEl("syncNow").onclick=()=>pushCloud();
+cloudEl("signOutBtn").onclick=async()=>{await supabaseClient?.auth.signOut()};
 renderAll();
+initCloud();
 })();

@@ -5,3 +5,5 @@
 .revision-topic-name{color:#172033;font-weight:600;flex:1;line-height:1.35}
 .revision-group .actions button{background:#e8edf3;color:#172033}
 .revision-group .actions button:focus,.revision-group .actions button:active{background:#e8edf3;color:#172033}
+
+.auth-overlay{position:fixed;inset:0;background:rgba(17,24,39,.72);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}.auth-overlay.hidden{display:none}.auth-card{width:min(440px,100%);background:#fff;border-radius:18px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}.auth-card h2{margin-top:0}.auth-card input{display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:12px;border:1px solid #d6dbe3;border-radius:10px}.cloudbar{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px 16px;border-bottom:1px solid #e5e7eb;font-size:13px}.cloudbar #cloudStatus{margin-right:auto}.cloud-ok{color:#16834a}.cloud-warn{color:#9a6700}.cloud-error{color:#b42318}@media(max-width:600px){.cloudbar{flex-wrap:wrap}.cloudbar #cloudStatus{width:100%}}
