@@ -4,52 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MBBS Study Tracker</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • Topic tracking • Daily goals</p></div></div></header>
+<header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • 1,293 topics</p></div></div></header>
 <main>
-<section class="hero"><h2>Study dashboard</h2><p>Plan your day and track your MBBS syllabus.</p></section>
+<section class="hero"><h2>Study dashboard</h2><p>Track your syllabus with a controlled daily goal.</p></section>
 <section class="stats">
 <div class="stat"><span>Overall</span><b id="overall">0%</b></div>
 <div class="stat"><span>Completed</span><b id="completed">0</b></div>
-<div class="stat"><span>Today + backlog</span><b id="goalStat">0 / 0</b></div>
-
+<div class="stat"><span>Progress</span><b id="goalStat">0 / 0</b></div>
+<div class="stat"><span>Backlog</span><b id="backlogStat">0</b></div>
 </section>
 <nav id="nav">
 <button data-page="subjects" class="active">Subjects</button>
 <button data-page="goals">Daily Goal</button>
 <button data-page="admin">Admin</button>
 </nav>
-
 <section id="subjects" class="page active">
 <input id="search" placeholder="Search subjects, headers or topics…">
 <div class="complete-panel">
   <button id="completeBtn" class="primary">Complete</button>
-  <select id="completeCount" disabled><option value="">Select number of topics</option></select>
-  <span id="selectionStatus">No active completion selection.</span>
+  <select id="completeCount" disabled><option value="">Choose number of topics</option></select>
+  <span id="selectionStatus">Set a daily target first.</span>
 </div>
 <div id="subjectList"></div>
 </section>
-
 <section id="goals" class="page">
 <div class="grid">
-<div class="card"><h3>Today's target</h3><p>Set your total target for today. This can be any positive number and can only be set once per day.</p>
-<input id="goalInput" type="number" min="0" step="1" placeholder="Topics per day">
-<button id="saveGoal" class="primary">Save target</button>
+<div class="card"><h3>Today's target</h3><p>Set how many topics you want to complete today. You can set it only once each day.</p>
+<input id="goalInput" type="number" min="0" step="1" placeholder="e.g. 5">
+<button id="saveGoal" class="primary">Set today's target</button>
 </div>
 <div class="card"><h3>Progress</h3><div id="goalBig" class="big">0 / 0</div><div class="bar"><i id="goalBar"></i></div>
 <div id="goalBreakdown"></div><p id="goalText"></p></div>
 </div>
-<div class="card"><h3>Today’s target & backlog</h3><div id="todayList"></div></div>
+<div class="card"><h3>Today + backlog</h3><div id="todayList"></div></div>
 </section>
-
-
-
 <section id="admin" class="page">
-<div class="notice"><b>Temporary admin tools.</b> Topic edits are stored separately from study progress. The daily-goal system automatically rolls unfinished targets into backlog at the start of the next day.</div>
+<div class="notice"><b>Temporary admin tools.</b> Topic edits are stored separately from study progress. Reset progress never changes the original syllabus.</div>
 <div class="grid">
 <div class="card"><h3>Add topic permanently</h3>
 <label>Subject</label><select id="addSubject"></select>
@@ -62,7 +56,7 @@
 <label>Search</label><input id="removeSearch" placeholder="Search topic">
 <div id="removeList"></div></div>
 </div>
-<div class="card"><h3>Reset</h3><p><b>Reset progress</b> clears study data but keeps topic edits.</p>
+<div class="card"><h3>Reset</h3><p><b>Reset progress</b> clears completed topics, daily goal and backlog, but keeps topic edits.</p>
 <button id="resetProgress" class="danger">Reset progress</button>
 <button id="restoreSyllabus" class="danger">Restore original syllabus</button></div>
 </section>
