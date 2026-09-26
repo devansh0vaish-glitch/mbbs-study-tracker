@@ -34,20 +34,55 @@ async function saveMaster(){
  const {error}=await supabaseClient.from("master_syllabus").update({syllabus:BASE,version:Date.now(),updated_by:cloudSession.user.email,updated_at:new Date().toISOString()}).eq("id",1);
  if(error){alert("Could not save master syllabus: "+error.message);return false} return true;
 }
+function subjectTopics(s){
+ const out=[];
+ Object.keys(BASE[s]||{}).forEach((h,hi)=>{(BASE[s][h]||[]).forEach((t,ti)=>out.push({h,hi,ti,t}));});
+ return out;
+}
+function renumberSubject(s){
+ let n=1;
+ Object.keys(BASE[s]||{}).forEach(h=>(BASE[s][h]||[]).forEach(t=>{t.n=n++;}));
+}
 function renderAdminSyllabus(){
  if(!isAdmin)return;
  const ss=$("adminSubject"), hs=$("adminHeader");
- ss.innerHTML=SUBJECTS.map(s=>`<option>${esc(s)}</option>`).join("");
- const s=ss.value||SUBJECTS[0]; hs.innerHTML=Object.keys(BASE[s]||{}).map(h=>`<option>${esc(h)}</option>`).join("");
+ const prevSubject=ss.value; const prevHeader=hs.value;
+ ss.innerHTML=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+ if(prevSubject && SUBJECTS.includes(prevSubject)) ss.value=prevSubject;
+ const s=ss.value||SUBJECTS[0];
+ hs.innerHTML=Object.keys(BASE[s]||{}).map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join("");
+ if(prevHeader && Object.prototype.hasOwnProperty.call(BASE[s]||{},prevHeader)) hs.value=prevHeader;
  const h=hs.value; const list=$("adminSyllabusList"); if(!list)return; list.innerHTML="";
  const arr=BASE[s]?.[h]||[];
- arr.forEach((t,i)=>{const row=document.createElement("div");row.className="admin-topic";row.innerHTML=`<span><b>${i+1}.</b> ${esc(t.title)} <span class="muted">${esc(t.duration||"")}</span></span><div class="row"><button class="secondary small" data-edit="${i}">Edit</button><button class="danger small" data-remove="${i}">Remove</button></div>`;list.appendChild(row)});
- const add=document.createElement("div");add.className="card";add.innerHTML=`<label>Insert at S.No. (within this header)</label><input id="adminInsertNo" type="number" min="1" value="${arr.length+1}"><label>Topic</label><input id="adminNewTopic"><label>Duration</label><input id="adminNewDuration"><button id="adminInsertTopic" class="primary">Add topic</button>`;list.appendChild(add);
- list.querySelectorAll("[data-remove]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.remove;if(!confirm("Remove this topic globally?"))return;BASE[s][h].splice(i,1);renumberHeader(s,h);if(await saveMaster())renderAll()});
- list.querySelectorAll("[data-edit]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.edit,t=BASE[s][h][i];const name=prompt("Topic name",t.title);if(name===null)return;const dur=prompt("Duration",t.duration||"");t.title=name.trim()||t.title;t.duration=(dur||"").trim();if(await saveMaster())renderAll()});
- $("adminInsertTopic").onclick=async()=>{const i=Math.max(1,Math.min(arr.length+1,parseInt($("adminInsertNo").value||arr.length+1,10)))-1;const title=$("adminNewTopic").value.trim();if(!title)return alert("Enter a topic name.");arr.splice(i,0,{n:0,title,duration:$("adminNewDuration").value.trim()});renumberHeader(s,h);if(await saveMaster())renderAll()};
+ const all=subjectTopics(s);
+ arr.forEach((t,i)=>{
+   const globalIndex=all.findIndex(x=>x.h===h&&x.t===t);
+   const row=document.createElement("div");row.className="admin-topic";
+   row.innerHTML=`<span><b>${esc(t.n ?? (globalIndex+1))}.</b> ${esc(t.title)} <span class="muted">${esc(t.duration||"")}</span></span><div class="row"><button class="secondary small" data-edit="${i}">Edit</button><button class="danger small" data-remove="${i}">Remove</button></div>`;
+   list.appendChild(row);
+ });
+ const nextNo=(all.length?Math.max(...all.map(x=>Number(x.t.n)||0))+1:1);
+ const add=document.createElement("div");add.className="card";
+ add.innerHTML=`<label>Insert at S.No. (within this subject)</label><input id="adminInsertNo" type="number" min="1" max="${nextNo}" value="${nextNo}"><label>Topic</label><input id="adminNewTopic"><label>Duration</label><input id="adminNewDuration"><button id="adminInsertTopic" class="primary">Add topic</button>`;
+ list.appendChild(add);
+ list.querySelectorAll("[data-remove]").forEach(b=>b.onclick=async()=>{
+   const i=+b.dataset.remove; if(!confirm("Remove this topic globally?"))return;
+   BASE[s][h].splice(i,1); renumberSubject(s); if(await saveMaster())renderAll();
+ });
+ list.querySelectorAll("[data-edit]").forEach(b=>b.onclick=async()=>{
+   const i=+b.dataset.edit,t=BASE[s][h][i]; const name=prompt("Topic name",t.title); if(name===null)return;
+   const dur=prompt("Duration",t.duration||""); t.title=name.trim()||t.title; t.duration=(dur||"").trim();
+   if(await saveMaster())renderAll();
+ });
+ $("adminInsertTopic").onclick=async()=>{
+   const requested=Math.max(1,Math.min(all.length+1,parseInt($("adminInsertNo").value||all.length+1,10)))-1;
+   const title=$("adminNewTopic").value.trim(); if(!title)return alert("Enter a topic name.");
+   const entry={n:0,title,duration:$("adminNewDuration").value.trim()};
+   const target=all[requested];
+   if(target){ const targetArr=BASE[s][target.h]; targetArr.splice(target.ti,0,entry); } else { BASE[s][h].push(entry); }
+   renumberSubject(s); if(await saveMaster())renderAll();
+ };
 }
-function renumberHeader(s,h){BASE[s][h].forEach((t,i)=>t.n=i+1)}
 async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);await loadGlobalState(); const hasCloud=state._skipCloudPullOnce?false:await pullCloud(); state._skipCloudPullOnce=false;if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
 async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else setCloudStatus("Cloud: signed out");supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else{cloudSession=null;document.getElementById("authOverlay")?.classList.remove("hidden");setCloudStatus("Cloud: signed out")}})}
 async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
@@ -301,8 +336,8 @@ $("resetProgress").onclick=async()=>{if(!isAdmin)return;if(!confirm("Reset study
 
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
 function renderRevision(){revisionRender()}
-function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
-$("adminSubject")?.addEventListener("change",renderAdminSyllabus);$("adminHeader")?.addEventListener("change",renderAdminSyllabus);$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
+function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();if($("selectSyllabus")){ $("selectSyllabus").value=localStorage.getItem("MBBS_SELECTED_SYLLABUS")||"mbbs"; $("syllabusSelectionStatus").textContent="Using the current master syllabus."; }renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
+$("adminSubject")?.addEventListener("change",()=>{renderAdminSyllabus();});$("adminHeader")?.addEventListener("change",renderAdminSyllabus);$("selectSyllabus")?.addEventListener("change",e=>{localStorage.setItem("MBBS_SELECTED_SYLLABUS",e.target.value);renderAll();});$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
 $("syncNow").onclick=async()=>{await loadGlobalState();const skip=state._skipCloudPullOnce;state._skipCloudPullOnce=false;if(!skip)await pullCloud();else await pushCloud();renderAll();setCloudStatus("Cloud: synced","ok")};
 cloudEl("signInBtn").onclick=()=>authAction("signin");
 cloudEl("signUpBtn").onclick=()=>authAction("signup");
