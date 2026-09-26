@@ -25,7 +25,7 @@
 <button data-page="subjects" class="active">Subjects</button>
 <button data-page="goals">Daily Goal</button>
 <button data-page="revision">Revision</button>
-<button data-page="admin">Admin</button>
+<button data-page="admin" id="adminNav" hidden>Admin</button><button data-page="settings">Settings</button>
 </nav>
 
 <section id="subjects" class="page active">
@@ -62,34 +62,16 @@
 </section>
 
 <section id="admin" class="page">
-<div class="notice"><b>Admin / temporary controls.</b> Study progress, historical completion, revision data, syllabus edits and settings are stored separately.</div>
-<div class="grid">
-<div class="card"><h3>Add topic permanently</h3>
-<label>Subject</label><select id="addSubject"></select><label>Header</label><input id="addHeader"><label>Topic</label><input id="addTopic"><label>Duration</label><input id="addDuration"><button id="addTopicBtn" class="primary">Add topic</button></div>
-<div class="card"><h3>Remove topic</h3><label>Subject</label><select id="removeSubject"></select><label>Search</label><input id="removeSearch" placeholder="Search within subject"><div id="removeList"></div></div>
-</div>
-
-<div class="card"><h3>Bulk historical completion</h3><p>Choose syllabus topics that were completed previously. They are stamped backwards from today at <b>5 topics per day</b>, preserving syllabus sequence. This does not change today's target, backlog or current goal progress.</p>
-<label>Subject</label><select id="bulkSubject"></select><label>Search</label><input id="bulkSearch" placeholder="Filter topics"><div id="bulkList"></div><div class="row"><b id="bulkCount">0 selected</b><button id="bulkClear" class="secondary">Clear selection</button><button id="bulkApply" class="primary">Add as historical completion</button></div></div>
-
-<div class="card"><h3>Revision eligibility</h3><p>Automatic = normal revision. Never = permanently excluded. Manual = excluded from automatic intake but can be manually queued later.</p>
-<label>Subject</label><select id="eligSubject"></select><label>Search</label><input id="eligSearch" placeholder="Filter topics"><div id="eligList"></div></div>
-
-<div class="card"><h3>Revision settings</h3>
-<div class="settings-grid">
-<label>New revision topics per day<input id="newPerDay" type="number" min="1" step="1"></label>
-<label>Total revision topics per day<input id="totalPerDay" type="number" min="1" step="1"></label>
-<label>Legacy/default intervals<input id="intervals" placeholder="1,3,7,14,30,60,120"></label>
-<label>Forgot intervals<input id="forgotIntervals" placeholder="1,2,4"></label>
-<label>Good intervals<input id="goodIntervals" placeholder="3,7,14,30,60,120"></label>
-<label>Easy intervals<input id="easyIntervals" placeholder="7,14,30,60,120,180"></label>
-</div>
-<button id="saveSettings" class="primary">Save revision settings</button></div>
-
-<div class="card"><h3>Data backup</h3><p>Export keeps goals, completion dates, revision history, eligibility, settings and syllabus edits. Import replaces tracker data but never replaces the built-in syllabus.</p><div class="row"><button id="exportData" class="secondary">Export data</button><label class="filebtn">Import data<input id="importData" type="file" accept=".json"></label></div></div>
-
-<div class="card"><h3>Simulation / reset</h3><p>Simulate Next Day rolls unfinished current progress into backlog and unlocks a new target. Reset progress clears study completion and goals but preserves syllabus edits and revision settings.</p>
-<div class="row"><button id="simulateDay" class="secondary">Simulate Next Day</button><button id="exitSimulation" class="secondary">Return to Today</button><button id="resetProgress" class="danger">Reset progress</button><button id="restoreSyllabus" class="danger">Restore original syllabus</button></div></div>
+<div class="notice"><b>Admin controls.</b> Changes to the syllabus below are the global master syllabus and are visible to every user. Simulate Next Day and Reset are global temporary controls.</div>
+<div class="card"><h3>Master syllabus editor</h3><div class="grid"><div><label>Subject</label><select id="adminSubject"></select></div><div><label>Header</label><select id="adminHeader"></select></div></div><div class="row"><button id="adminAddSubject" class="secondary">Add subject</button><button id="adminRenameSubject" class="secondary">Rename subject</button><button id="adminAddHeader" class="secondary">Add header</button></div><div id="adminSyllabusList"></div></div>
+<div class="card"><h3>Global temporary controls</h3><p>These affect the shared app state. They never undo master syllabus edits.</p><div class="row"><button id="simulateDay" class="secondary">Simulate Next Day</button><button id="exitSimulation" class="secondary">Return to Today</button><button id="resetProgress" class="danger">Reset study data for all users</button></div></div>
+</section>
+<section id="settings" class="page">
+<div class="hero"><h2>Settings</h2><p>These settings belong to your account only.</p></div>
+<div class="card"><h3>Revision settings</h3><div class="settings-grid"><label>New revision topics per day<input id="newPerDay" type="number" min="1" step="1"></label><label>Total revision topics per day<input id="totalPerDay" type="number" min="1" step="1"></label><label>Legacy/default intervals<input id="intervals" placeholder="1,3,7,14,30,60,120"></label><label>Forgot intervals<input id="forgotIntervals" placeholder="1,2,4"></label><label>Good intervals<input id="goodIntervals" placeholder="3,7,14,30,60,120"></label><label>Easy intervals<input id="easyIntervals" placeholder="7,14,30,60,120,180"></label></div><button id="saveSettings" class="primary">Save revision settings</button></div>
+<div class="card"><h3>Bulk historical completion</h3><p>Add previously completed topics with dates, five topics per day, without changing today's target or backlog.</p><label>Subject</label><select id="bulkSubject"></select><label>Search</label><input id="bulkSearch" placeholder="Filter topics"><div id="bulkList"></div><div class="row"><b id="bulkCount">0 selected</b><button id="bulkClear" class="secondary">Clear selection</button><button id="bulkApply" class="primary">Add historical completion</button></div></div>
+<div class="card"><h3>Revision eligibility</h3><p>Automatic, Manual or Never for each topic.</p><label>Subject</label><select id="eligSubject"></select><label>Search</label><input id="eligSearch" placeholder="Filter topics"><div id="eligList"></div></div>
+<div class="card"><h3>Backup</h3><div class="row"><button id="exportData" class="secondary">Export data</button><label class="filebtn">Import data<input id="importData" type="file" accept=".json"></label></div></div>
 </section>
 </main>
 <script src="syllabus.js"></script><script src="app.js"></script>

@@ -10,12 +10,52 @@ function meaningfulLocalData(){return Object.keys(state.done||{}).length||Object
 async function pushCloud(){if(!supabaseClient||!cloudSession){return} if(cloudBusy){cloudDirty=true;return} cloudBusy=true;cloudDirty=false;setCloudStatus("Cloud: syncing…");try{const {error}=await supabaseClient.from("user_tracker_data").upsert({user_id:cloudSession.user.id,data:state,schema_version:1,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error)throw error;setCloudStatus("Cloud: synced","ok")}catch(e){console.error(e);setCloudStatus("Cloud: sync failed","error")}finally{cloudBusy=false;if(cloudDirty)queueCloudSync()}}
 function queueCloudSync(){if(!cloudSession)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(pushCloud,700)}
 async function pullCloud(){if(!cloudSession)return false;setCloudStatus("Cloud: loading…");const {data,error}=await supabaseClient.from("user_tracker_data").select("data,updated_at").eq("user_id",cloudSession.user.id).maybeSingle();if(error){setCloudStatus("Cloud: load failed","error");throw error}if(data?.data){localStorage.setItem(STORE,JSON.stringify(data.data));state={...defaults,...data.data,custom:{...defaults.custom,...(data.data.custom||{})},revision:{...defaults.revision,...(data.data.revision||{}),settings:{...defaults.revision.settings,...((data.data.revision||{}).settings||{})}}};return true}return false}
-async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);const hasCloud=await pullCloud();if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
+async function loadGlobalState(){
+ if(!cloudSession)return;
+ try{
+  const {data:ms,error}=await supabaseClient.from("master_syllabus").select("syllabus,version").eq("id",1).single();
+  if(error)throw error;
+  isAdmin=!!(cloudSession.user.email&&cloudSession.user.email.toLowerCase()==="devansh0vaish@gmail.com");
+  // Admin account can be adjusted by changing the app_admins table; client also gates UI.
+  if(ms?.syllabus && Object.keys(ms.syllabus).length){BASE=ms.syllabus;refreshSubjects();}
+  else if(isAdmin){await supabaseClient.from("master_syllabus").update({syllabus:window.MBBS_SYLLABUS,version:1,updated_by:cloudSession.user.email,updated_at:new Date().toISOString()}).eq("id",1);BASE=window.MBBS_SYLLABUS;refreshSubjects();}
+  const {data:gs}=await supabaseClient.from("global_app_state").select("simulated_date,reset_version").eq("id",1).single();
+  if(gs){
+    const rv=Number(gs.reset_version||0); const last=Number(localStorage.getItem("MBBS_GLOBAL_RESET_VERSION")||0);
+    if(rv>last && !isAdmin){state.done={};state.completionDates={};state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];localStorage.setItem("MBBS_GLOBAL_RESET_VERSION",String(rv));localStorage.setItem(STORE,JSON.stringify(state));state._skipCloudPullOnce=true;}
+    state._globalResetVersion=rv; state._globalSimulatedDate=gs.simulated_date||null; state.simulatedDate=gs.simulated_date||null;
+  }
+  document.getElementById("adminNav").hidden=!isAdmin;
+  renderAll();
+ }catch(e){console.error(e)}
+}
+async function saveMaster(){
+ if(!isAdmin)return;
+ const {error}=await supabaseClient.from("master_syllabus").update({syllabus:BASE,version:Date.now(),updated_by:cloudSession.user.email,updated_at:new Date().toISOString()}).eq("id",1);
+ if(error){alert("Could not save master syllabus: "+error.message);return false} return true;
+}
+function renderAdminSyllabus(){
+ if(!isAdmin)return;
+ const ss=$("adminSubject"), hs=$("adminHeader");
+ ss.innerHTML=SUBJECTS.map(s=>`<option>${esc(s)}</option>`).join("");
+ const s=ss.value||SUBJECTS[0]; hs.innerHTML=Object.keys(BASE[s]||{}).map(h=>`<option>${esc(h)}</option>`).join("");
+ const h=hs.value; const list=$("adminSyllabusList"); if(!list)return; list.innerHTML="";
+ const arr=BASE[s]?.[h]||[];
+ arr.forEach((t,i)=>{const row=document.createElement("div");row.className="admin-topic";row.innerHTML=`<span><b>${i+1}.</b> ${esc(t.title)} <span class="muted">${esc(t.duration||"")}</span></span><div class="row"><button class="secondary small" data-edit="${i}">Edit</button><button class="danger small" data-remove="${i}">Remove</button></div>`;list.appendChild(row)});
+ const add=document.createElement("div");add.className="card";add.innerHTML=`<label>Insert at S.No. (within this header)</label><input id="adminInsertNo" type="number" min="1" value="${arr.length+1}"><label>Topic</label><input id="adminNewTopic"><label>Duration</label><input id="adminNewDuration"><button id="adminInsertTopic" class="primary">Add topic</button>`;list.appendChild(add);
+ list.querySelectorAll("[data-remove]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.remove;if(!confirm("Remove this topic globally?"))return;BASE[s][h].splice(i,1);renumberHeader(s,h);if(await saveMaster())renderAll()});
+ list.querySelectorAll("[data-edit]").forEach(b=>b.onclick=async()=>{const i=+b.dataset.edit,t=BASE[s][h][i];const name=prompt("Topic name",t.title);if(name===null)return;const dur=prompt("Duration",t.duration||"");t.title=name.trim()||t.title;t.duration=(dur||"").trim();if(await saveMaster())renderAll()});
+ $("adminInsertTopic").onclick=async()=>{const i=Math.max(1,Math.min(arr.length+1,parseInt($("adminInsertNo").value||arr.length+1,10)))-1;const title=$("adminNewTopic").value.trim();if(!title)return alert("Enter a topic name.");arr.splice(i,0,{n:0,title,duration:$("adminNewDuration").value.trim()});renumberHeader(s,h);if(await saveMaster())renderAll()};
+}
+function renumberHeader(s,h){BASE[s][h].forEach((t,i)=>t.n=i+1)}
+async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);await loadGlobalState(); const hasCloud=state._skipCloudPullOnce?false:await pullCloud(); state._skipCloudPullOnce=false;if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
 async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else setCloudStatus("Cloud: signed out");supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else{cloudSession=null;document.getElementById("authOverlay")?.classList.remove("hidden");setCloudStatus("Cloud: signed out")}})}
 async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
-const BASE=window.MBBS_SYLLABUS;
+let BASE=window.MBBS_SYLLABUS;
 if(!BASE){document.body.innerHTML="<main><h2>Syllabus failed to load.</h2></main>";return;}
-const SUBJECTS=Object.keys(BASE), STORE="MBBS_STUDY_TRACKER_V9";
+let SUBJECTS=Object.keys(BASE), STORE="MBBS_STUDY_TRACKER_V9";
+let isAdmin=false;
+function refreshSubjects(){SUBJECTS=Object.keys(BASE)}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const key=(s,h,t)=>`${s}||${h}||${t}`;
@@ -212,18 +252,15 @@ function groupHTML(g,preview=false){
 document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const ks=b.dataset.group.split("~~~"),action=b.dataset.action;ks.forEach(k=>{const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let c=h.cycle||0;if(action==="forgot")c=0;else c=Math.min(c+1,intervals.length-1);h.cycle=c;h.difficulty=action;h.next=shift(today(),intervals[c]||1);state.revision.history[k]=h});save();renderAll()});
 
 function populateAdmin(){
- const opts=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
- ["addSubject","removeSubject","bulkSubject","eligSubject"].forEach(id=>$(id).innerHTML=opts);
- $("removeSubject").insertAdjacentHTML("afterbegin",'<option value="">Select subject</option>');$("bulkSubject").insertAdjacentHTML("afterbegin",'<option value="">Select subject</option>');$("eligSubject").insertAdjacentHTML("afterbegin",'<option value="">Select subject</option>');
+ if(!$("newPerDay"))return;
  $("newPerDay").value=state.revision.settings.newPerDay;$("totalPerDay").value=state.revision.settings.totalPerDay;$("intervals").value=state.revision.settings.intervals.join(",");
  $("forgotIntervals").value=(state.revision.settings.difficultyIntervals?.forgot||[1,2,4]).join(",");
  $("goodIntervals").value=(state.revision.settings.difficultyIntervals?.good||[3,7,14,30,60,120]).join(",");
  $("easyIntervals").value=(state.revision.settings.difficultyIntervals?.easy||[7,14,30,60,120,180]).join(",");
+ const opts=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+ ["bulkSubject","eligSubject"].forEach(id=>{if($(id))$(id).innerHTML=opts});
 }
-function renderRemove(){
- const s=$("removeSubject").value,q=$("removeSearch").value.trim().toLowerCase();$("removeList").innerHTML="";if(!s){$("removeList").innerHTML="<p class='muted'>Select a subject first.</p>";return}
- allTopics().filter(x=>x.s===s&&(!q||(x.h+" "+x.t.title).toLowerCase().includes(q))).forEach(x=>{const d=document.createElement("div");d.className="admin-topic";d.innerHTML=`<span>${esc(x.h)} — ${esc(x.t.title)}</span><button class="danger small">Remove</button>`;d.querySelector("button").onclick=()=>{if(!confirm("Remove this topic permanently?"))return;state.custom.removed.push(x.k);delete state.done[x.k];delete state.completionDates[x.k];save();renderAll()};$("removeList").appendChild(d)});
-}
+function renderRemove(){}
 const bulkSelected=new Set();
 function renderBulk(){
  const s=$("bulkSubject").value,q=$("bulkSearch").value.trim().toLowerCase(),box=$("bulkList");box.innerHTML="";if(!s){box.innerHTML="<p class='muted'>Select a subject first.</p>";$("bulkCount").textContent="0 selected";return}
@@ -245,8 +282,6 @@ function renderEligibility(){
 }
 $("eligSubject").onchange=renderEligibility;$("eligSearch").oninput=renderEligibility;
 
-$("addTopicBtn").onclick=()=>{const s=$("addSubject").value,h=$("addHeader").value.trim(),t=$("addTopic").value.trim(),duration=$("addDuration").value.trim();if(!s||!h||!t){alert("Enter subject, header and topic.");return}const k=key(s,h,t);if(find(k)){alert("Topic already exists.");return}state.custom.added.push({s,h,t:{title:t,duration}});save();$("addHeader").value=$("addTopic").value=$("addDuration").value="";renderAll()};
-$("removeSubject").onchange=renderRemove;$("removeSearch").oninput=renderRemove;
 $("saveSettings").onclick=()=>{
  const np=Math.max(1,parseInt($("newPerDay").value||5,10));
  const tp=Math.max(np,parseInt($("totalPerDay").value||15,10));
@@ -260,47 +295,17 @@ $("saveSettings").onclick=()=>{
 $("exportData").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="mbbs-study-tracker-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $("importData").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=="object")throw Error();state={...defaults,...x,custom:{...defaults.custom,...(x.custom||{})},revision:{...defaults.revision,...(x.revision||{}),settings:{...defaults.revision.settings,...((x.revision||{}).settings||{})}}};save();renderAll();alert("Tracker data imported. Built-in syllabus was not replaced.")}catch(err){alert("Invalid backup file.")}e.target.value=""};
 
-$("simulateDay").onclick=()=>{
- const current=today();
- const unfinished=Math.max(0,Number(state.todayTarget||0)-Number(state.completedGoal||0));
-
- // Only today's uncompleted NEW target becomes backlog.
- // Existing backlog is never re-added to itself.
- state.backlog=Number(state.backlog||0)+unfinished;
-
- const next=shift(current,1);
- state.simulatedDate=next;
- state.goalDate=next;
- state.targetSet=false;
- state.todayTarget=0;
- state.goalTotal=Number(state.backlog||0);
- state.completedGoal=0;
- state.selectionQuota=0;
- state.selectedTopics=[];
- save();
- renderAll();
-};
-$("exitSimulation").onclick=()=>{
- state.simulatedDate=null;
- state.goalDate=realToday();
- state.targetSet=false;
- state.todayTarget=0;
- state.goalTotal=Number(state.backlog||0);
- state.completedGoal=0;
- state.selectionQuota=0;
- state.selectedTopics=[];
- save();
- renderAll();
-};
-$("resetProgress").onclick=()=>{if(!confirm("Reset study completion, daily target and backlog? Revision history and syllabus edits will stay."))return;state.done={};state.completionDates={};state.simulatedDate=null;state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();renderAll()};
-$("restoreSyllabus").onclick=()=>{if(!confirm("Restore original syllabus and remove permanent topic edits? Study and revision data will remain."))return;state.custom={added:[],removed:[]};save();renderAll()};
+$("simulateDay").onclick=async()=>{if(!isAdmin)return;const current=today();const unfinished=Math.max(0,Number(state.todayTarget||0)-Number(state.completedGoal||0));state.backlog=Number(state.backlog||0)+unfinished;const next=shift(current,1);state.simulatedDate=next;state.goalDate=next;state.targetSet=false;state.todayTarget=0;state.goalTotal=Number(state.backlog||0);state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();await supabaseClient.from("global_app_state").update({simulated_date:next,updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
+$("exitSimulation").onclick=async()=>{if(!isAdmin)return;state.simulatedDate=null;save();await supabaseClient.from("global_app_state").update({simulated_date:null,updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
+$("resetProgress").onclick=async()=>{if(!isAdmin)return;if(!confirm("Reset study progress, daily goals, backlog and revision history for all users? The master syllabus will remain unchanged."))return;state.done={};state.completionDates={};state.simulatedDate=null;state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];save();await supabaseClient.from("global_app_state").update({simulated_date:null,reset_version:Date.now(),updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
 
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
 function renderRevision(){revisionRender()}
-function renderAll(){ensureToday();populateAdmin();renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove();renderBulk();renderEligibility()}
+function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
+$("adminSubject")?.addEventListener("change",renderAdminSyllabus);$("adminHeader")?.addEventListener("change",renderAdminSyllabus);$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
+$("syncNow").onclick=async()=>{await loadGlobalState();const skip=state._skipCloudPullOnce;state._skipCloudPullOnce=false;if(!skip)await pullCloud();else await pushCloud();renderAll();setCloudStatus("Cloud: synced","ok")};
 cloudEl("signInBtn").onclick=()=>authAction("signin");
 cloudEl("signUpBtn").onclick=()=>authAction("signup");
-cloudEl("syncNow").onclick=()=>pushCloud();
 cloudEl("signOutBtn").onclick=async()=>{await supabaseClient?.auth.signOut()};
 renderAll();
 initCloud();
