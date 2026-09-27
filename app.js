@@ -92,9 +92,27 @@ function renderAdminSyllabus(){
    renumberSubject(s); if(await saveMaster())renderAll();
  };
 }
-async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);await loadGlobalState(); const hasCloud=state._skipCloudPullOnce?false:await pullCloud(); state._skipCloudPullOnce=false;if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
+async function startCloudSession(session){cloudSession=session;document.getElementById("authOverlay")?.classList.add("hidden");setCloudStatus(`Cloud: ${session.user.user_metadata?.username||session.user.email||"signed in"}`);const localSnapshot=JSON.stringify(state);await loadGlobalState(); const hasCloud=state._skipCloudPullOnce?false:await pullCloud(); state._skipCloudPullOnce=false;if(!hasCloud&&meaningfulLocalData()){await pushCloud()}else if(hasCloud){localStorage.setItem("MBBS_STUDY_TRACKER_PRE_CLOUD_BACKUP",localSnapshot);renderAll();setCloudStatus("Cloud: synced","ok")}else{renderAll();setCloudStatus("Cloud: synced","ok")} }
 async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else setCloudStatus("Cloud: signed out");supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else{cloudSession=null;document.getElementById("authOverlay")?.classList.remove("hidden");setCloudStatus("Cloud: signed out")}})}
-async function authAction(mode){const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}cloudEl("authMsg").textContent="Working…";const result=mode==="signup"?await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:"https://devansh0vaish-glitch.github.io/mbbs-study-tracker/"}}):await supabaseClient.auth.signInWithPassword({email,password});if(result.error){cloudEl("authMsg").textContent=result.error.message;return}cloudEl("authMsg").textContent=mode==="signup"?"Account created. Check your email if confirmation is required.":"Signed in."}
+async function authAction(mode){
+ const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;
+ const username=cloudEl("authUsername")?.value.trim()||"";
+ if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}
+ if(mode==="signup"&&!username){cloudEl("authMsg").textContent="Enter a display name.";return}
+ cloudEl("authMsg").textContent="Working…";
+ const result=mode==="signup"
+   ?await supabaseClient.auth.signUp({email,password,options:{data:{username}}})
+   :await supabaseClient.auth.signInWithPassword({email,password});
+ if(result.error){cloudEl("authMsg").textContent=result.error.message;return}
+ if(mode==="signup"){
+   if(result.data?.session){
+     cloudEl("authMsg").textContent="Account created. Signing you in…";
+     await startCloudSession(result.data.session);
+   }else{
+     cloudEl("authMsg").textContent="Account created. You can now sign in.";
+   }
+ }else cloudEl("authMsg").textContent="Signed in.";
+}
 let BASE=window.MBBS_SYLLABUS;
 if(!BASE){document.body.innerHTML="<main><h2>Syllabus failed to load.</h2></main>";return;}
 let SUBJECTS=Object.keys(BASE), STORE="MBBS_STUDY_TRACKER_V9";
