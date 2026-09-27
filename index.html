@@ -9,44 +9,26 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<style id="v29-ui">
-:root{
-  --v29-bg:#f5f7fb; --v29-card:#fff; --v29-text:#172033; --v29-muted:#687386;
-  --v29-border:#e5e9f0; --v29-accent:#4f46e5; --v29-accent2:#6366f1;
-  --v29-shadow:0 10px 30px rgba(23,32,51,.07);
-}
-body{background:var(--v29-bg)!important;color:var(--v29-text)!important;}
+<style id="v30-ui">
+:root{--v30-bg:#f5f7fb;--v30-card:#fff;--v30-text:#172033;--v30-muted:#687386;--v30-border:#e5e9f0;--v30-accent:#4f46e5;--v30-shadow:0 10px 30px rgba(23,32,51,.07)}
+body{background:var(--v30-bg)!important;color:var(--v30-text)!important}
+input,select,textarea{border:1px solid var(--v30-border)!important;border-radius:10px!important;background:#fff!important}
+input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--v30-accent)!important;box-shadow:0 0 0 3px rgba(79,70,229,.12)!important}
 button,.btn{border-radius:10px!important;transition:.18s ease!important}
-button:hover,.btn:hover{transform:translateY(-1px);filter:brightness(1.02)}
-input,select,textarea{border:1px solid var(--v29-border)!important;border-radius:10px!important;background:#fff!important}
-input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--v29-accent)!important;box-shadow:0 0 0 3px rgba(79,70,229,.12)!important}
-.card,.panel,.section,.modal,.settings-card{box-shadow:var(--v29-shadow)!important;border:1px solid var(--v29-border)!important;border-radius:16px!important}
-nav,.tabs,.topbar,.header{backdrop-filter:blur(12px)}
+button:hover,.btn:hover{transform:translateY(-1px)}
+.card,.panel,.section,.modal,.settings-card{border:1px solid var(--v30-border)!important;border-radius:16px!important;box-shadow:var(--v30-shadow)!important}
+.auth-display-name-row[hidden]{display:none!important}
 </style>
-<script id="v29-auth-ui">
-document.addEventListener('DOMContentLoaded',()=>{
-  const isName=(el)=>{
-    const x=((el.id||'')+' '+(el.name||'')+' '+(el.placeholder||'')+' '+(el.getAttribute('aria-label')||'')).toLowerCase();
-    return x.includes('display name')||x.includes('username')||x.includes('full name')||x==='name';
-  };
-  const fields=[...document.querySelectorAll('input')].filter(isName);
-  const sync=()=>{
-    const text=(document.body.innerText||'').toLowerCase();
-    const signup=/create account|sign up|register|new account/.test(text);
-    fields.forEach(el=>{
-      const row=el.closest('.form-group,.field,.input-group,.form-row,label,div')||el.parentElement;
-      if(row) row.style.display=signup?'':'none';
-      el.required=signup;
-    });
-  };
-  sync();
-  new MutationObserver(sync).observe(document.body,{subtree:true,childList:true});
-});
-</script>
+
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3157e8">
 </head>
 <body>
 <div id="authOverlay" class="auth-overlay">
-<div class="auth-card"><h2>MBBS Study Tracker</h2><p id="authStatus">Sign in to enable cloud sync.</p><div id="authForm"><input id="authUsername" type="text" maxlength="50" placeholder="Display name" hidden><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Password"><div class="row"><button id="signInBtn" class="primary">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div></div><p id="authMsg" class="muted"></p></div></div>
+<div class="auth-card"><h2>MBBS Study Tracker</h2><p id="authStatus">Sign in to enable cloud sync.</p><div id="authForm"><div id="authDisplayNameRow" class="auth-display-name-row" hidden><input id="authUsername" type="text" maxlength="50" placeholder="Display name"></div><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Password"><div class="row"><button id="signInBtn" class="primary">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div></div><p id="authMsg" class="muted"></p></div></div>
 <header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • syllabus + goals + revision</p></div></div></header>
 <main>
 <section class="stats">

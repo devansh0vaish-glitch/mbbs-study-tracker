@@ -82,8 +82,11 @@ function renderAdminSyllabus(){
    BASE[s][h].splice(i,1); renumberSubject(s); if(await saveMaster())renderAll();
  });
  list.querySelectorAll("[data-edit]").forEach(b=>b.onclick=async()=>{
-   const i=+b.dataset.edit,t=BASE[s][h][i]; const name=prompt("Topic name",t.title); if(name===null)return;
-   const dur=prompt("Duration",t.duration||""); t.title=name.trim()||t.title; t.duration=(dur||"").trim();
+   const i=+b.dataset.edit,t=BASE[s][h][i];
+   const name=prompt("Topic name",t.title); if(name===null)return;
+   const dur=prompt("Duration (e.g. 45 min)",t.duration||""); if(dur===null)return;
+   t.title=name.trim()||t.title;
+   t.duration=dur.trim();
    if(await saveMaster())renderAll();
  });
  $("adminInsertTopic").onclick=async()=>{
@@ -131,12 +134,16 @@ async function clearSignedOutView(){
 }
 function setAuthMode(mode){
  authMode=mode;
- const u=$("authUsername"), submit=$("signInBtn"), toggle=$("signUpBtn");
+ const u=$("authUsername"), row=$("authDisplayNameRow"), submit=$("signInBtn"), toggle=$("signUpBtn");
  if(!u||!submit||!toggle)return;
  if(mode==="signup"){
-   u.hidden=false;u.value="";u.required=true;submit.textContent="Create account";toggle.textContent="Back to sign in";
+   if(row) row.hidden=false;
+   u.hidden=false;u.value="";u.required=true;
+   submit.textContent="Create account";toggle.textContent="Back to sign in";
  }else{
-   u.hidden=true;u.required=false;u.value="";submit.textContent="Sign in";toggle.textContent="Create account";
+   if(row) row.hidden=true;
+   u.hidden=true;u.required=false;u.value="";
+   submit.textContent="Sign in";toggle.textContent="Create account";
  }
 }
 async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}setAuthMode("signin");const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else await clearSignedOutView();supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else await clearSignedOutView()})}
