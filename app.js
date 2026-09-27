@@ -38,6 +38,7 @@ async function saveMaster(){
 }
 function headerOrder(s){
  const headers=Object.keys(BASE[s]||{});
+ const originalIndex=new Map(headers.map((h,i)=>[h,i]));
  return headers.sort((a,b)=>{
    const an=(BASE[s][a]||[]).reduce((m,t)=>Math.min(m,Number.isFinite(Number(t.n))?Number(t.n):Infinity),Infinity);
    const bn=(BASE[s][b]||[]).reduce((m,t)=>Math.min(m,Number.isFinite(Number(t.n))?Number(t.n):Infinity),Infinity);
@@ -147,7 +148,7 @@ async function authAction(mode){
  if(mode==="signup"&&!username){cloudEl("authMsg").textContent="Enter a display name.";return}
  cloudEl("authMsg").textContent="Working…";
  const result=mode==="signup"
-   ?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:username}}})
+   ?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:username,full_name:username}}})
    :await supabaseClient.auth.signInWithPassword({email,password});
  if(result.error){cloudEl("authMsg").textContent=result.error.message;return}
  if(mode==="signup"){
@@ -205,8 +206,17 @@ state.revision.settings.difficultyIntervals??={forgot:[1,2,4],good:[3,7,14,30,60
 function save(){if(STORE) localStorage.setItem(STORE,JSON.stringify(state));queueCloudSync()}
 function allTopics(){
  const a=[];
- SUBJECTS.forEach((s,si)=>Object.entries(BASE[s]||{}).forEach(([h,arr],hi)=>arr.forEach((t,ti)=>{const k=key(s,h,t.title);if(!state.custom.removed.includes(k))a.push({s,h,t,k,si,hi,ti})})));
- state.custom.added.forEach((x,i)=>{const k=key(x.s,x.h,x.t.title);if(!state.custom.removed.includes(k))a.push({s:x.s,h:x.h,t:x.t,k,si:SUBJECTS.indexOf(x.s),hi:9999+i,ti:i})});
+ SUBJECTS.forEach((s,si)=>{
+   headerOrder(s).forEach((h,hi)=>{
+     const topics=[...(BASE[s][h]||[])].sort((a,b)=>{
+       const an=Number(a.n),bn=Number(b.n);
+       const av=Number.isFinite(an)?an:Infinity,bv=Number.isFinite(bn)?bn:Infinity;
+       return av-bv;
+     });
+     topics.forEach((t,ti)=>{const k=key(s,h,t.title);if(!state.custom.removed.includes(k))a.push({s,h,t,k,si,hi,ti});});
+   });
+ });
+ state.custom.added.forEach((x,i)=>{const k=key(x.s,x.h,x.t.title);if(!state.custom.removed.includes(k))a.push({s:x.s,h:x.h,t:x.t,k,si:SUBJECTS.indexOf(x.s),hi:9999+i,ti:i});});
  return a;
 }
 function find(k){return allTopics().find(x=>x.k===k)}
@@ -364,22 +374,22 @@ function revisionRender(){
  $("revisionPreview").innerHTML=revisionGroups(all.slice(0,5)).map(g=>groupHTML(g,true)).join("")||"<p class='muted'>No revision items yet.</p>";
 }
 function groupHTML(g,preview=false){
- const count=g.items.length;
- const diff=g.items[0]?.difficulty||"new";
- const topics=g.items.slice(0,5).map(x=>`<div class="revision-topic"><span class="revision-topic-name">${esc(x.t.title)}</span><span class="tag">${esc(x.difficulty||"new")}</span></div>`).join("");
- return `<div class="revision-group">
-   <h4>${esc(g.h)} <span class="tag">${count} topic${count===1?"":"s"}</span></h4>
-   <p>${esc(g.s)} · ${g.due} · Difficulty: ${esc(diff)}</p>
-   <div class="revision-topics">${topics}</div>
-   ${preview?"":`<div class="actions">
-      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="forgot">Forgot</button>
-      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="good">Good</button>
-      <button class="secondary" data-group="${esc(g.items.map(x=>x.k).join("~~~"))}" data-action="easy">Easy</button>
+ const topics=g.items.slice(0,5).map(x=>`<div class="revision-topic-card">
+   <div class="revision-topic-head"><span class="revision-topic-name"><b>${esc(x.t.n??"")}.</b> ${esc(x.t.title)}</span><span class="tag">${esc(x.difficulty||"new")}</span></div>
+   <div class="muted revision-topic-meta">${esc(g.s)} · ${esc(g.h)} · Due ${esc(x.due)}</div>
+   ${preview?"":`<div class="actions revision-topic-actions">
+      <button class="secondary" data-topic="${esc(x.k)}" data-action="forgot">Forgot</button>
+      <button class="secondary" data-topic="${esc(x.k)}" data-action="good">Good</button>
+      <button class="secondary" data-topic="${esc(x.k)}" data-action="easy">Easy</button>
    </div>`}
+ </div>`).join("");
+ return `<div class="revision-group">
+   <h4>${esc(g.h)} <span class="tag">${g.items.length} topic${g.items.length===1?"":"s"}</span></h4>
+   <div class="revision-topics">${topics}</div>
  </div>`;
 }
 
-document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const ks=b.dataset.group.split("~~~"),action=b.dataset.action;ks.forEach(k=>{const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let c=h.cycle||0;if(action==="forgot")c=0;else c=Math.min(c+1,intervals.length-1);h.cycle=c;h.difficulty=action;h.next=shift(today(),intervals[c]||1);state.revision.history[k]=h});save();renderAll()});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const k=b.dataset.topic;if(!k)return;const action=b.dataset.action;const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let c=h.cycle||0;if(action==="forgot")c=0;else c=Math.min(c+1,intervals.length-1);h.cycle=c;h.difficulty=action;h.next=shift(today(),intervals[c]||1);state.revision.history[k]=h;save();renderAll()});
 
 function populateAdmin(){
  if(!$("newPerDay"))return;
