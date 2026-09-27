@@ -58,7 +58,7 @@ function renderAdminSyllabus(){
  if(!isAdmin)return;
  const ss=$("adminSubject"), hs=$("adminHeader");
  const prevSubject=ss.value; const prevHeader=hs.value;
- ss.innerHTML=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+ ss.innerHTML=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(subjectLabel(s))}</option>`).join("");
  if(prevSubject && SUBJECTS.includes(prevSubject)) ss.value=prevSubject;
  const s=ss.value||SUBJECTS[0];
  hs.innerHTML=headerOrder(s).map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join("");
@@ -101,7 +101,7 @@ async function startCloudSession(session){
  state=structuredClone(defaults);
  if(raw){try{const s=JSON.parse(raw);state={...defaults,...s,custom:{...defaults.custom,...(s.custom||{})},revision:{...defaults.revision,...(s.revision||{}),settings:{...defaults.revision.settings,...((s.revision||{}).settings||{}),difficultyIntervals:{...defaults.revision.settings.difficultyIntervals,...(((s.revision||{}).settings||{}).difficultyIntervals||{})}}}}}catch(e){}}
  document.getElementById("authOverlay")?.classList.add("hidden");
- setCloudStatus(`Cloud: ${session.user.user_metadata?.username||session.user.email||"signed in"}`);
+ setCloudStatus(`Cloud: ${session.user.user_metadata?.display_name||session.user.user_metadata?.username||session.user.email||"signed in"}`);
  await loadGlobalState();
  const hasCloud=state._skipCloudPullOnce?false:await pullCloud();
  state._skipCloudPullOnce=false;
@@ -142,12 +142,12 @@ async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailabl
 async function authAction(mode){
  const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;
  const username=cloudEl("authUsername")?.value.trim()||"";
- if(mode==="signin") setAuthMode("signin");
+ if(mode==="signin") { setAuthMode("signin"); cloudEl("authUsername").value=""; }
  if(!email||password.length<6){cloudEl("authMsg").textContent="Enter an email and a password of at least 6 characters.";return}
  if(mode==="signup"&&!username){cloudEl("authMsg").textContent="Enter a display name.";return}
  cloudEl("authMsg").textContent="Working…";
  const result=mode==="signup"
-   ?await supabaseClient.auth.signUp({email,password,options:{data:{username}}})
+   ?await supabaseClient.auth.signUp({email,password,options:{data:{display_name:username}}})
    :await supabaseClient.auth.signInWithPassword({email,password});
  if(result.error){cloudEl("authMsg").textContent=result.error.message;return}
  if(mode==="signup"){
@@ -161,12 +161,20 @@ async function authAction(mode){
 }
 let BASE=window.MBBS_SYLLABUS;
 if(!BASE){document.body.innerHTML="<main><h2>Syllabus failed to load.</h2></main>";return;}
+// Fixed syllabus subject order. These are the actual keys used by the current syllabus.
+// Display labels are normalized separately so ENT / Forensic / Radiodiagnosis appear as requested.
 const MASTER_SUBJECT_ORDER=[
  "Anatomy","Physiology","Biochemistry","Pathology","Pharmacology","Microbiology",
- "Forensic Medicine & Toxicology","Community Medicine","Ophthalmology","ENT","General Medicine",
+ "Forensic Medicine","Community Medicine","Ophthalmology","Otorhinolaryngology (ENT)","General Medicine",
  "Paediatrics","General Surgery","Orthopaedics","Obstetrics & Gynaecology","Dermatology",
- "Psychiatry","Radiodiagnosis","Anaesthesiology"
+ "Psychiatry","Radiology","Anaesthesiology"
 ];
+const SUBJECT_DISPLAY_NAMES={
+ "Forensic Medicine":"Forensic Medicine & Toxicology",
+ "Otorhinolaryngology (ENT)":"ENT",
+ "Radiology":"Radiodiagnosis"
+};
+function subjectLabel(s){ return SUBJECT_DISPLAY_NAMES[s] || s; }
 let SUBJECTS=[];
 let isAdmin=false;
 function refreshSubjects(){
@@ -379,8 +387,8 @@ function populateAdmin(){
  $("forgotIntervals").value=(state.revision.settings.difficultyIntervals?.forgot||[1,2,4]).join(",");
  $("goodIntervals").value=(state.revision.settings.difficultyIntervals?.good||[3,7,14,30,60,120]).join(",");
  $("easyIntervals").value=(state.revision.settings.difficultyIntervals?.easy||[7,14,30,60,120,180]).join(",");
- const opts=SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
- ["bulkSubject","eligSubject"].forEach(id=>{if($(id)){const old=$(id).value;$(id).innerHTML=opts;if(SUBJECTS.includes(old))$(id).value=old;}});
+ const opts=`<option value="">Select subject</option>`+SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(subjectLabel(s))}</option>`).join("");
+ ["bulkSubject","eligSubject"].forEach(id=>{if($(id)){const old=$(id).value;$(id).innerHTML=opts;if(old && SUBJECTS.includes(old))$(id).value=old;else $(id).value="";}});
 }
 function renderRemove(){}
 const bulkSelected=new Set();
@@ -421,9 +429,35 @@ $("simulateDay").onclick=async()=>{if(!isAdmin)return;const current=today();cons
 $("exitSimulation").onclick=async()=>{if(!isAdmin)return;state.simulatedDate=null;save();await supabaseClient.from("global_app_state").update({simulated_date:null,updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
 $("resetProgress").onclick=async()=>{if(!isAdmin)return;if(!confirm("Reset study progress, daily goals, backlog and revision history for all users? The master syllabus will remain unchanged."))return;state.done={};state.completionDates={};state.simulatedDate=null;state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];save();await supabaseClient.from("global_app_state").update({simulated_date:null,reset_version:Date.now(),updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
 
-$("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();});
+$("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();if(b.dataset.page==="history")renderHistory();});
 function renderRevision(){revisionRender()}
-function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();if($("selectSyllabus")){ $("selectSyllabus").value=localStorage.getItem("MBBS_SELECTED_SYLLABUS")||"mbbs"; $("syllabusSelectionStatus").textContent="Using the current master syllabus."; }renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
+function renderAccountInfo(){
+ const u=cloudSession?.user;
+ const name=u?.user_metadata?.display_name||u?.user_metadata?.username||"—";
+ $("accountDisplayName") && ($("accountDisplayName").textContent=name);
+ $("accountEmail") && ($("accountEmail").textContent=u?.email||"—");
+}
+function renderHistory(){
+ const hs=$("historySubject"), hd=$("historyDate"), list=$("historyList");
+ if(!hs||!hd||!list)return;
+ const previousSubject=hs.value, previousDate=hd.value;
+ const records=Object.entries(state.completionDates||{}).map(([k,date])=>{const x=find(k);return x?{...x,date}:null}).filter(Boolean);
+ const dates=[...new Set(records.map(x=>x.date))].sort((a,b)=>b.localeCompare(a));
+ hs.innerHTML=`<option value="">All subjects</option>`+SUBJECTS.map(s=>`<option value="${esc(s)}">${esc(subjectLabel(s))}</option>`).join("");
+ if(previousSubject&&SUBJECTS.includes(previousSubject))hs.value=previousSubject;
+ hd.innerHTML=`<option value="">All dates</option>`+dates.map(d=>`<option value="${d}">${d}</option>`).join("");
+ if(previousDate&&dates.includes(previousDate))hd.value=previousDate;
+ const filtered=records.filter(x=>(!hs.value||x.s===hs.value)&&(!hd.value||x.date===hd.value));
+ filtered.sort((a,b)=>b.date.localeCompare(a.date)||a.h.localeCompare(b.h)||a.s.localeCompare(b.s)||((Number(a.t.n)||999999)-(Number(b.t.n)||999999))||a.t.title.localeCompare(b.t.title));
+ if(!filtered.length){list.innerHTML='<p class="muted">No completed topics found.</p>';return;}
+ const datesGroups=[];
+ filtered.forEach(x=>{let dg=datesGroups.at(-1);if(!dg||dg.date!==x.date){dg={date:x.date,headers:[]};datesGroups.push(dg);}let hg=dg.headers.at(-1);if(!hg||hg.header!==x.h){hg={header:x.h,subjects:[]};dg.headers.push(hg);}let sg=hg.subjects.at(-1);if(!sg||sg.subject!==x.s){sg={subject:x.s,items:[]};hg.subjects.push(sg);}sg.items.push(x);});
+ list.innerHTML=datesGroups.map(dg=>`<div class="history-date"><h3>${esc(dg.date)}</h3>${dg.headers.map(hg=>`<div class="history-header"><h4>${esc(hg.header)}</h4>${hg.subjects.map(sg=>`<div class="history-subject"><b>${esc(sg.subject)}</b>${sg.items.map(x=>`<div class="history-topic"><span><b>${esc(x.t.n??"")}.</b> ${esc(x.t.title)}</span><span class="muted">${esc(x.date)}</span></div>`).join("")}</div>`).join("")}</div>`).join("")}</div>`).join("");
+}
+$("historySubject")?.addEventListener("change",renderHistory);
+$("historyDate")?.addEventListener("change",renderHistory);
+
+function renderAll(){ensureToday();if(isAdmin)renderAdminSyllabus();populateAdmin();renderAccountInfo();renderHistory();if($("selectSyllabus")){ $("selectSyllabus").value=localStorage.getItem("MBBS_SELECTED_SYLLABUS")||"mbbs"; $("syllabusSelectionStatus").textContent="Using the current master syllabus."; }renderStats();goalRender();renderSubjects();completeControls();renderRevision();renderRemove?.();renderBulk?.();renderEligibility?.()}
 $("adminSubject")?.addEventListener("change",()=>{renderAdminSyllabus();});$("adminHeader")?.addEventListener("change",renderAdminSyllabus);
 $("adminRemoveSubject")?.addEventListener("click",async()=>{
  const subject=$("adminSubject").value;
