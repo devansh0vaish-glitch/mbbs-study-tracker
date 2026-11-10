@@ -8,7 +8,9 @@ This is a complete replacement build based on the supplied V36 project. Existing
 - Sends every message in the active conversation, in chronological order, including the latest user message.
 - No longer slices the conversation to the last 16 turns or deletes older messages after 60 turns.
 - Sends the current tracker state alongside the conversation: complete topic catalogue, completion states, daily goal, weekly goals, planner settings and saved planner tasks.
-- Server-side context allowance increased. The complete chat is placed first in the payload so it is preserved if an unusually large tracker snapshot reaches the request limit.
+- The full transcript remains saved locally/cloud-side, while only the latest 14 messages (with per-message length limits) are sent to the model.
+- Topic identifiers are retained in a compact catalogue to reduce request size.
+- The Edge Function falls back to Flash-Lite on primary-model 429, 503 or timeout errors; 503 receives one short retry. Individual model attempts are capped at 14 seconds.
 - Assistant chats are counted as meaningful local data during cloud conflict checks, preventing chat-only local history from being overwritten on sign-in.
 
 ### Tracker actions (confirmation required)
@@ -43,6 +45,8 @@ Supported built-in modes:
 To add another provider, register an adapter in `ai-provider.js` or a separately loaded script. It must implement `complete({message, context, config})` and return the same response shape. Keep provider secrets on the server; never put private API keys in browser files.
 
 ### Layout and page persistence
+- The application brand header stays pinned at the top while scrolling.
+- The Today summary, progress metrics and cloud controls appear only on Overview.
 - Navigation is now outside the main page container and fixed as an independent scroll region on desktop/tablet.
 - Main content no longer controls the sidebar's position or scroll.
 - Mobile retains the bottom navigation rail.
@@ -64,4 +68,4 @@ To add another provider, register an adapter in `ai-provider.js` or a separately
 ## Important test status
 - JavaScript syntax checks and ZIP integrity checks pass.
 - The changes have not been deployed to GitHub Pages or Supabase from this environment.
-- A live Gemini request, private endpoint, offline model, browser/iPad layout and real cloud sync have not been end-to-end tested. Test with a backup account or exported data first.
+- JavaScript syntax and ZIP integrity are checked, but a live Gemini request, private endpoint, offline model, browser/iPad layout and real cloud sync have not been end-to-end tested. Test with a backup account or exported data first.

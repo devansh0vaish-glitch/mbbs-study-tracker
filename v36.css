@@ -53,3 +53,10 @@ body{background:var(--v36-bg);color:var(--v36-ink)}header{background:var(--v36-s
 
 /* Fixed navigation rail: independent scroll container, never participates in page layout. */
 @media(min-width:701px){body{overflow-x:hidden}#nav{contain:layout paint}main{width:min(100%,1380px);box-sizing:border-box;padding-left:230px;padding-right:18px}header .header-inner{box-sizing:border-box}}
+
+/* Keep the brand bar pinned while the page content scrolls. */
+header{position:sticky;top:0;z-index:100;isolation:isolate;padding-top:env(safe-area-inset-top);box-shadow:0 5px 18px rgba(0,0,0,.14)}
+.v36-overview-summary{display:block;margin:0 0 16px}
+.v36-overview-summary>.today{margin:0 0 10px}
+.v36-overview-summary>.stats{margin:0 0 8px}
+.v36-overview-summary>.cloudbar{max-width:none;padding:6px 0 2px}

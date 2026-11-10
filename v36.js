@@ -70,6 +70,20 @@
   };
   Object.entries(pages).forEach(([id,html])=>{ if(!$(`${id}`)){const s=document.createElement('section');s.id=id;s.className='page v36-page';s.innerHTML=html;document.querySelector('main').appendChild(s);} });
 
+  // The legacy daily summary belongs to Overview only, not to every tracker page.
+  const overview = $('overview');
+  if (overview) {
+    let summary = $('overviewSummary');
+    if (!summary) {
+      summary = document.createElement('div'); summary.id = 'overviewSummary'; summary.className = 'v36-overview-summary';
+      const todayCard = $('todayCard'), stats = document.querySelector('main > .stats:not(.smallstats)'), cloudbar = document.querySelector('main > .cloudbar');
+      if (todayCard) summary.appendChild(todayCard);
+      if (stats) summary.appendChild(stats);
+      if (cloudbar) summary.appendChild(cloudbar);
+      overview.prepend(summary);
+    }
+  }
+
   const st = state();
   st.planner = {availableMinutes:240,newLimit:5,days:{},completed:{},generatedAt:null,prioritySubject:'',...(st.planner||{}),days:{...(st.planner?.days||{})},completed:{...(st.planner?.completed||{})}};
   st.sessions = Array.isArray(st.sessions) ? st.sessions : [];
@@ -377,10 +391,10 @@
   }
   function buildAssistantContext() {
     const base=buildLocalInsights(), s=state();
-    // Supply the complete live syllabus catalogue so the model can target exact topic keys.
-    const catalog=topics().map(x=>({topicKey:x.k,subject:core.subjectLabel(x.s),header:x.h,title:x.t.title,done:!!s.done[x.k],duration:x.t.duration||''}));
-    const days=Object.entries(s.planner?.days||{}).map(([date,p])=>({date,tasks:(p?.tasks||[]).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
-    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})},preferences:{...(s.preferences||{})}};
+    // Keep exact topic keys for safe actions, but omit duplicate metadata to keep requests small.
+    const catalog=topics().map(x=>[x.k,core.subjectLabel(x.s),String(x.t.title||''),!!s.done[x.k]]);
+    const days=Object.entries(s.planner?.days||{}).slice(-21).map(([date,p])=>({date,tasks:(p?.tasks||[]).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
+    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})}};
   }
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
@@ -391,11 +405,11 @@
     chat.messages.push({role:'user',content:promptText,createdAt:now});chat.updatedAt=now;
     if(chat.title==='New conversation')chat.title=promptText.slice(0,48)+(promptText.length>48?'…':'');
     input.value='';core.save();renderAssistant();$('assistantAsk').disabled=true;$('assistantMode').textContent='Thinking…';
-    const pending={role:'assistant',content:'Reviewing the full conversation and your live tracker data…',createdAt:new Date().toISOString(),pending:true};chat.messages.push(pending);renderAssistant();
+    const pending={role:'assistant',content:'Checking your recent conversation and study data…',createdAt:new Date().toISOString(),pending:true};chat.messages.push(pending);renderAssistant();
     try {
       const trackerContext=buildAssistantContext();
-      // Send every prior turn, in order, including the latest user message. No tail slicing.
-      const conversation=chat.messages.filter(m=>!m.pending).map(m=>({role:m.role,content:String(m.content||''),createdAt:m.createdAt||null}));
+      // Preserve the full transcript locally; send a compact recent window to avoid huge, slow requests.
+      const conversation=chat.messages.filter(m=>!m.pending).slice(-14).map(m=>({role:m.role,content:String(m.content||'').slice(0,3500),createdAt:m.createdAt||null}));
       const result=await core.askAI(promptText,{conversation,tracker:trackerContext});
       pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
       pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
