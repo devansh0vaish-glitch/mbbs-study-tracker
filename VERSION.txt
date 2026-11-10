@@ -1,2 +1,4 @@
-MBBS Study Tracker V36 — On-device AI update
-Local WebLLM/WebGPU runtime; provider set to local; Gemini backend retired.
+MBBS Study Tracker V36
+Cross-device AI upgrade
+WebLLM 0.2.87 | Qwen3.5/Gemma 4/Phi-4/Llama model catalogue
+Local-first, optional consent-based Gemini cloud fallback

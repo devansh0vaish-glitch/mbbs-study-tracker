@@ -1,20 +1,48 @@
-# MBBS Study Tracker V36 — AI, navigation and stability update
+# MBBS Study Tracker V36 — Cross-device AI upgrade
 
-This is a complete replacement build based on the supplied V36 project. Existing tracker storage, Supabase authentication/cloud sync, syllabus and PWA structure are retained.
+This is a complete replacement build based on the supplied V36 project. Existing tracker storage, Supabase authentication/cloud sync, syllabus, PWA structure and confirm-before-apply tracker actions are retained.
 
-## What changed
+## AI provider modes
 
-### AI conversation context
-- Sends every message in the active conversation, in chronological order, including the latest user message.
-- No longer slices the conversation to the last 16 turns or deletes older messages after 60 turns.
-- Sends the current tracker state alongside the conversation: complete topic catalogue, completion states, daily goal, weekly goals, planner settings and saved planner tasks.
-- The full transcript remains saved locally/cloud-side, while only the latest 14 messages (with per-message length limits) are sent to the model.
-- Topic identifiers are retained in a compact catalogue to reduce request size.
-- The Edge Function falls back to Flash-Lite on primary-model 429, 503 or timeout errors; 503 receives one short retry. Individual model attempts are capped at 14 seconds.
-- Assistant chats are counted as meaningful local data during cloud conflict checks, preventing chat-only local history from being overwritten on sign-in.
+The Study Assistant offers three modes in its sidebar:
 
-### Tracker actions (confirmation required)
-The assistant can propose:
+- **Local only** (default): all inference runs in the current browser. Prompts and tracker context are not sent to an AI provider. Requires HTTPS and a usable WebGPU adapter.
+- **Local first · cloud fallback**: use a loaded local model first. If local inference fails or is unavailable, the app can use Gemini through the secured Supabase Edge Function. This mode requires the separate cloud-consent checkbox.
+- **Cloud AI**: send requests directly to Gemini through the secured Supabase Edge Function. This requires a signed-in user and a server-side `GEMINI_API_KEY` secret.
+
+Cloud consent is off by default and is stored per browser/device. The UI explains that cloud mode sends the user's prompt and compact tracker context to Google. The user can revoke consent at any time. Gemini requests use `store:false`. API credentials are never included in frontend files. Provider usage may incur charges or be subject to quotas.
+
+## Local model catalogue
+
+The app reads `prebuiltAppConfig.model_list` from the pinned WebLLM `0.2.87` runtime and only offers exact model IDs present in that catalogue:
+
+- Qwen3.5 0.8B — lightweight option for phones and lower-memory devices.
+- Qwen3.5 2B — balanced default for capable tablets and laptops.
+- Qwen3.5 4B — advanced option; may fail on mobile Safari due to memory limits.
+- Gemma 4 E2B and Phi-4 Mini — alternatives where the browser exposes required WebGPU features and the runtime catalogue includes them.
+- Llama 3.2 1B — compatibility fallback.
+
+The current prebuilt model records specify a 4,096-token context window. The app does not falsely raise the model's native context limit. It reserves response space and enforces a conservative input budget. Browser APIs do not reliably expose total free RAM, so compatibility detection is only an estimate; successful model initialization is the final test.
+
+## Context and conversation management
+
+- The complete chat transcript remains saved in tracker storage.
+- Requests send a bounded recent message window plus a small extractive digest of older messages.
+- The topic catalogue is included only when the current question is relevant to topics, completion, revision or planning, and is capped.
+- Planner history is shortened for ordinary questions and expanded only for planner-related questions.
+- The local adapter enforces an input budget and reserves output tokens.
+- The Supabase Edge Function applies a second context-size cap before calling Gemini.
+
+## Download and compatibility UX
+
+- Displays a visible model-loading progress bar and percentage when WebLLM provides progress data.
+- Shows runtime, catalogue, HTTPS and WebGPU errors instead of silently failing.
+- Disables the download button while model initialization is running.
+- Retains browser-cached model weights for subsequent sessions where browser storage allows it.
+
+## Tracker actions
+
+The assistant may propose:
 - Complete or reopen an exact syllabus topic.
 - Complete a set of topics (up to 30 per proposal).
 - Set today's new-topic goal.
@@ -22,66 +50,25 @@ The assistant can propose:
 - Add or remove planner tasks.
 - Change planner capacity, daily new-topic limit and priority subject.
 
-The frontend validates identifiers, date ranges, limits and action types against the current tracker state. The user must confirm each proposal. The model cannot directly execute JavaScript or write to the database.
+The frontend validates identifiers, date ranges, limits and action types against current tracker state. The user must explicitly confirm each proposal. Models cannot directly execute JavaScript or write to the database.
 
-### Provider-independent AI architecture
-`ai-provider.js` is the provider adapter. The chat UI calls the same `complete()` interface regardless of the selected model.
+## Supabase cloud provider
 
-Default configuration:
-```js
-window.MBBS_AI_CONFIG = {
-  provider: 'supabase-gemini',
-  endpoint: '',
-  sendTrackerContext: true,
-  timeoutMs: 60000
-};
-```
+The `study-assistant` Edge Function is deployed to project `rnjmgtttujzfjonvnaae`, with JWT verification enabled. It uses Gemini 3.8 Flash and falls back to Gemini 3.5 Flash-Lite on transient failures/rate limits. It authenticates the Supabase user, uses `store:false`, applies request-size limits and returns structured proposals only.
 
-Supported built-in modes:
-- `supabase-gemini` — current authenticated Supabase Edge Function and Gemini provider.
-- `private-endpoint` — a privately hosted endpoint that accepts `{ message, context }` and returns `{ reply, actions, model, provider }`. The app sends the signed-in user's Supabase access token as a Bearer token when available. Your server must validate it and enforce user-level authorization.
-- `offline` — reserved for a local model adapter. Register the adapter using `MBBS_AI_PROVIDERS.register('offline', { complete: async ({message, context, config}) => ({reply, actions: [], model: 'Local model'}) })`.
+Ensure `GEMINI_API_KEY` exists under Supabase Dashboard → Edge Functions → Secrets. If missing, add it there. Do not put it in `ai-provider.js`, `app.js`, or any other browser file. If the key is missing, local-only mode continues to work; cloud modes return a clear configuration error.
 
-To add another provider, register an adapter in `ai-provider.js` or a separately loaded script. It must implement `complete({message, context, config})` and return the same response shape. Keep provider secrets on the server; never put private API keys in browser files.
+## Deployment
 
-### Layout and page persistence
-- The application brand header stays pinned at the top while scrolling.
-- The Today summary, progress metrics and cloud controls appear only on Overview.
-- Navigation is now outside the main page container and fixed as an independent scroll region on desktop/tablet.
-- Main content no longer controls the sidebar's position or scroll.
-- Mobile retains the bottom navigation rail.
-- The last selected page is saved locally and restored after reload, returning to the site, or authentication/cloud initialization. Overview is used only on first visit or if the saved page no longer exists.
-- Service worker cache version bumped to force updated assets to load.
-
-## Deploy
-
-1. Back up your current repository and export tracker data before replacing files.
-2. Replace the repository contents with this ZIP, preserving your GitHub Pages repository settings.
-3. Deploy the Edge Function source at `supabase/functions/study-assistant/index.ts` to the existing Supabase project:
+1. Export/backup tracker data and keep a copy of the current repository.
+2. Replace the GitHub Pages repository files with this ZIP and commit/push them to the existing repository. Preserve GitHub Pages settings.
+3. The Edge Function is already deployed by this upgrade; redeploy only if its source changes:
    ```bash
    supabase functions deploy study-assistant --project-ref rnjmgtttujzfjonvnaae
    ```
-4. Ensure `GEMINI_API_KEY` is configured in Supabase Function Secrets. Do not add it to `ai-provider.js` or any browser code.
-5. Keep JWT verification enabled for the `study-assistant` function.
-6. Commit and push the replacement files. Open the site and perform a hard refresh / remove the installed PWA and re-add it if an old shell persists.
+4. Keep JWT verification enabled for `study-assistant`.
+5. Hard-refresh the site. For an installed PWA, close it and reopen it after the new service worker activates; if necessary remove and reinstall it.
 
-## Important test status
-- JavaScript syntax checks and ZIP integrity checks pass.
-- The changes have not been deployed to GitHub Pages or Supabase from this environment.
-- JavaScript syntax and ZIP integrity are checked, but a live Gemini request, private endpoint, offline model, browser/iPad layout and real cloud sync have not been end-to-end tested. Test with a backup account or exported data first.
+## Verification status
 
-
-## On-device AI (zero AI hosting cost)
-
-The Study Assistant now uses WebLLM in the browser with WebGPU. A user chooses and downloads a supported model from the assistant sidebar; the model weights are cached by the browser on that device and inference runs locally. No AI provider API key or GPU server is required. The first model download requires internet; subsequent inference can work offline after the app shell, runtime and model assets are cached.
-
-### Device compatibility and limitations
-
-- Requires a secure HTTPS origin and a browser/device exposing WebGPU (recent Chrome/Edge and recent Safari releases; actual support varies by OS version and hardware).
-- The app discovers the small Qwen2 model variants available in the pinned WebLLM build and offers those that are present. Small models are a compromise: they are not equivalent to a large cloud model for complex MBBS reasoning.
-- Model downloads can be large and need free storage. Browser storage may be cleared or evicted by the operating system; the model may then need to be downloaded again.
-- If WebGPU is unavailable, the local model cannot run in that browser. No automatic cloud fallback is used.
-- Inference prompts and tracker context are processed in the browser. Existing tracker account sync may still sync saved chat history to Supabase.
-- AI-proposed tracker changes continue to pass the existing action validation and explicit Review & apply confirmation flow.
-
-The legacy `study-assistant` Edge Function is retained as a migration stub and returns HTTP 410; it no longer calls Gemini or another hosted model. Remove any unused `GEMINI_API_KEY` secret from Supabase Function secrets manually if it remains configured.
+JavaScript syntax checks and ZIP integrity checks are run for this build. The Supabase Edge Function deployment was verified as ACTIVE, version 24, with JWT verification enabled. A live Gemini request, real iPad Safari model download, and cross-device browser testing have not been performed in this environment. Verify these with a signed-in test account and a configured Gemini secret before relying on cloud mode. Local model download reliability varies by device, OS, browser and available memory.

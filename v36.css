@@ -61,3 +61,25 @@ header{position:sticky;top:0;z-index:100;isolation:isolate;padding-top:env(safe-
 .v36-overview-summary>.stats{margin:0 0 8px}
 .v36-overview-summary>.cloudbar{max-width:none;padding:6px 0 2px}
 .v36-local-ai-box{display:grid;gap:7px;padding:11px;margin:10px 0;border:1px solid var(--v36-line);border-radius:12px;background:var(--v36-card)}.v36-local-ai-box>b{font-size:13px}.v36-local-ai-box p{font-size:11px;margin:0}.v36-local-ai-box label{font-size:11px;font-weight:650}.v36-local-ai-box select{width:100%;min-width:0;padding:8px;border:1px solid var(--v36-line);border-radius:8px;background:var(--v36-bg);color:var(--v36-text);font-size:11px}.v36-local-ai-box .v36-btn{width:100%;font-size:11px;padding:8px}.v36-local-ai-box #localAiProgress{font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+
+/* Cross-device AI provider and model download controls */
+.v36-local-ai-box{background:var(--v36-panel);border:1px solid var(--v36-line);border-radius:14px;padding:13px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.v36-local-ai-box>b{font-size:13px}
+.v36-local-ai-box>p{font-size:10px;line-height:1.5;margin:0}
+.v36-local-ai-box label{font-size:11px;color:var(--v36-muted);margin:2px 0}
+.v36-local-ai-box select{width:100%;min-width:0;padding:9px;font-size:11px}
+.v36-local-ai-box button{width:100%}
+.v36-ai-consent{display:flex!important;align-items:flex-start;gap:8px;line-height:1.45}
+.v36-ai-consent input{flex:none;margin-top:2px}
+.v36-ai-privacy-note{font-size:9px!important}
+.v36-local-ai-box hr{width:100%;border:0;border-top:1px solid var(--v36-line);margin:5px 0}
+.v36-ai-progress-wrap{width:100%;margin-top:3px}
+.v36-ai-progress-wrap progress{display:block;width:100%;height:10px;border:0;border-radius:99px;overflow:hidden;appearance:none;-webkit-appearance:none;background:var(--v36-line)}
+.v36-ai-progress-wrap progress::-webkit-progress-bar{background:var(--v36-line);border-radius:99px}
+.v36-ai-progress-wrap progress::-webkit-progress-value{background:var(--v36-accent);border-radius:99px;transition:width .2s ease}
+.v36-ai-progress-wrap progress::-moz-progress-bar{background:var(--v36-accent);border-radius:99px}
+.v36-ai-progress-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:6px}
+.v36-ai-progress-meta span{font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.v36-ai-progress-meta b{font-size:10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.v36-local-ai-box button:disabled{opacity:.6;cursor:wait}
+@media(max-width:700px){.v36-chat-shell{grid-template-columns:1fr}.v36-chat-sidebar{border-right:0;border-bottom:1px solid var(--v36-line)}.v36-chat-list{max-height:180px}}

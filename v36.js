@@ -54,7 +54,7 @@
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
-          <div class="v36-local-ai-box"><b>On-device AI</b><p class="muted">Download a model once. It runs on this device; no AI server or subscription is used.</p><label for="localAiModel">Model</label><select id="localAiModel"><option value="">Checking device…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div id="localAiProgress" class="muted" role="status">Model not loaded</div></div>
+          <div class="v36-local-ai-box"><b>AI provider</b><p class="muted">Local AI keeps prompts on this device. Cloud AI can use a stronger hosted model but sends your question and selected tracker context to Google through the secured Supabase function.</p><label for="aiProviderMode">How should AI run?</label><select id="aiProviderMode"><option value="local">Local only · private</option><option value="hybrid">Local first · cloud fallback</option><option value="cloud">Cloud AI · strongest</option></select><label class="v36-ai-consent"><input type="checkbox" id="aiCloudConsent"> I explicitly allow cloud AI to receive my prompts and compact tracker context.</label><p class="muted v36-ai-privacy-note">Cloud requests require sign-in and a server-side API key. Provider usage, quotas or charges may apply. Your key is never stored in this app. Consent is off by default.</p><hr><b>On-device model</b><label for="localAiModel">Compatible model</label><select id="localAiModel"><option value="">Checking WebGPU and model catalogue…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div class="v36-ai-progress-wrap"><progress id="localAiProgressBar" max="100" value="0" aria-label="Model download progress"></progress><div class="v36-ai-progress-meta"><span id="localAiProgress" class="muted" role="status" aria-live="polite">Model not loaded</span><b id="localAiProgressPercent">0%</b></div></div></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
           <p class="v36-chat-privacy">AI inference runs locally on this device. Your tracker may still sync saved chat history through your Supabase account.</p>
         </aside>
@@ -288,7 +288,6 @@
     const prioritized=z.pending.slice().sort((a,b)=>{const ai=z.subjects.findIndex(x=>x.sub===a.s),bi=z.subjects.findIndex(x=>x.sub===b.s);return ai-bi;}).slice(0,limit);
     return `Suggested ${Math.round(mins/60*10)/10}-hour study block based on your latest tracker data:\n\n${revMinutes?`1. Revise due topics — ${revMinutes} minutes\n`:''}${prioritized.map((x,i)=>`${i+(revMinutes?2:1)}. ${core.subjectLabel(x.s)} · ${x.t.title} — approx. ${durationMinutes(x.t.duration)} min`).join('\n')||'Use this time for active recall and consolidation.'}\n\nYour highest-priority alert: ${z.rec[0].title}. Keep a 10–15 minute buffer. Generate a formal plan in Planner to save and track tasks.`;
   }
-  function buildAssistantContext(){const z=buildLocalInsights(),s=state();return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};}
   // Persistent multi-chat Assistant. Conversation data lives in the existing synced state JSON.
   const newChatId = () => 'chat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
   const activeChat = () => state().assistantChats.find(c => c.id === state().assistantActiveChatId) || null;
@@ -319,7 +318,7 @@
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
     $('assistantChatTitle').textContent=chat.title || 'New conversation';
-    $('assistantMode').textContent=window.MBBS_LOCAL_LLM?.status?.engine?'Local AI ready':'Local AI · model not loaded';
+    $('assistantMode').textContent=window.MBBS_AI_CONFIG?.mode==='cloud'?'Cloud AI mode':window.MBBS_AI_CONFIG?.mode==='hybrid'?'Local first · cloud fallback':window.MBBS_LOCAL_LLM?.status?.engine?'Local AI ready':'Local AI · model not loaded';
     list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
     messages.innerHTML=(chat.messages||[]).map((m,i)=>{
       const role=m.role==='user'?'user':'assistant';
@@ -390,40 +389,78 @@
       action.applied=true;action.appliedAt=new Date().toISOString();core.save();window.MBBS_V36_REFRESH?.();renderAssistant();alert('Tracker updated successfully.');
     } catch(err){console.error('Assistant action failed',err);alert('The tracker could not apply this change: '+(err.message||'Unknown error'));}
   }
-  function buildAssistantContext() {
-    const base=buildLocalInsights(), s=state();
-    // Keep exact topic keys for safe actions, but omit duplicate metadata to keep requests small.
-    const catalog=topics().map(x=>[x.k,core.subjectLabel(x.s),String(x.t.title||''),!!s.done[x.k]]);
-    const days=Object.entries(s.planner?.days||{}).slice(-21).map(([date,p])=>({date,tasks:(p?.tasks||[]).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
+  function buildAssistantContext(query='') {
+    const base=buildLocalInsights(), s=state(), q=String(query||'').toLowerCase();
+    const words=q.split(/[^a-z0-9]+/).filter(w=>w.length>2&&!['the','and','for','with','what','which','how','can','you','please','from','into','this','that','have','should','about','today','make','plan'].includes(w));
+    const allTopics=topics();
+    const ranked=allTopics.map(x=>{const hay=(core.subjectLabel(x.s)+' '+x.h+' '+x.t.title).toLowerCase();const score=words.reduce((n,w)=>n+(hay.includes(w)?1:0),0);return {x,score};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+    const broad=/all topics|entire syllabus|whole syllabus|complete .*subject|finish .*subject/.test(q);
+    const needsTopics=/topic|syllabus|complete|finish|reopen|mark|planner|schedule|timetable|revise|revision|study plan/.test(q)||ranked.length>0;
+    const selectedTopics=broad?allTopics.slice(0,60):(needsTopics?ranked.slice(0,45).map(x=>x.x):[]);
+    const catalog=selectedTopics.map(x=>[x.k,core.subjectLabel(x.s),String(x.t.title||''),!!s.done[x.k]]);
+    const plannerQuery=/planner|schedule|timetable|tasks|study plan|revision plan|available time/.test(q);
+    const days=Object.entries(s.planner?.days||{}).slice(plannerQuery?-14:-5).map(([date,p])=>({date,tasks:(p?.tasks||[]).slice(0,12).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
     return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})}};
   }
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
   }
-  // On-device model manager. The model is downloaded only after an explicit user action.
-  const localModelSelect=$('localAiModel'), localProgress=$('localAiProgress');
+  // Cross-device AI settings and model manager.
+  const localModelSelect=$('localAiModel'), localProgress=$('localAiProgress'), localProgressBar=$('localAiProgressBar'), localProgressPercent=$('localAiProgressPercent');
+  const providerSelect=$('aiProviderMode'), cloudConsent=$('aiCloudConsent');
   function localProgressText(text){if(localProgress)localProgress.textContent=text;}
+  function updateLocalProgress(p){
+    localProgressText(p?.text||'Downloading model…');
+    const fraction=Number(p?.progress);
+    if(localProgressBar){if(Number.isFinite(fraction)&&fraction>=0){localProgressBar.value=Math.min(100,Math.max(0,fraction*100));localProgressBar.setAttribute('value',String(localProgressBar.value));}else localProgressBar.removeAttribute('value');}
+    if(localProgressPercent)localProgressPercent.textContent=Number.isFinite(fraction)&&fraction>=0?Math.round(Math.min(1,fraction)*100)+'%':'…';
+  }
+  function syncProviderControls(){
+    if(providerSelect)providerSelect.value=window.MBBS_AI_CONFIG?.mode||'local';
+    if(cloudConsent)cloudConsent.checked=!!window.MBBS_AI_CONFIG?.cloudConsent;
+  }
+  providerSelect?.addEventListener('change',()=>{
+    const mode=providerSelect.value;
+    if((mode==='cloud'||mode==='hybrid')&&!cloudConsent?.checked){providerSelect.value='local';alert('Enable the cloud privacy consent checkbox first. No information has been sent.');return;}
+    window.MBBS_AI_PROVIDERS.setMode(mode);
+    $('assistantMode').textContent=mode==='local'?'Local AI mode':mode==='cloud'?'Cloud AI mode':'Local first · cloud fallback';
+  });
+  cloudConsent?.addEventListener('change',()=>{
+    window.MBBS_AI_PROVIDERS.setCloudConsent(cloudConsent.checked);
+    if(!cloudConsent.checked&&providerSelect&&providerSelect.value!=='local'){providerSelect.value='local';window.MBBS_AI_PROVIDERS.setMode('local');}
+  });
+  syncProviderControls();
   async function populateLocalModels(){
-    if(!localModelSelect||!window.MBBS_LOCAL_LLM)return;
+    if(!localModelSelect)return;
+    if(!window.MBBS_LOCAL_LLM){localModelSelect.innerHTML='<option value="">Local runtime unavailable</option>';localProgressText('The local AI script did not load. Refresh the app and retry.');return;}
+    localModelSelect.disabled=true;localProgressText('Checking WebGPU and loading compatible model catalogue…');
     try{
+      const compatibility=await window.MBBS_LOCAL_LLM.check();
       const items=await window.MBBS_LOCAL_LLM.models();
-      localModelSelect.innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.id.replace(/-Instruct.*$/,'').replace(/-MLC$/,''))} · ${esc(x.size)}</option>`).join('')||'<option value="">No compatible model found</option>';
+      localModelSelect.innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.label)} · ${Math.round(x.vramMB)} MB · ${esc(x.note)}</option>`).join('')||'<option value="">No compatible model build found</option>';
       const saved=localStorage.getItem('MBBS_LOCAL_LLM_MODEL');if(saved&&items.some(x=>x.id===saved))localModelSelect.value=saved;
-      localProgressText(items.length?'Choose a model, then download it over Wi-Fi.':'No compatible model found in the runtime.');
-    }catch(e){localProgressText('Could not load model catalogue: '+(e.message||e));}
+      const preferred=items.find(x=>x.id==='Qwen3.5-2B-q4f16_1-MLC')||items.find(x=>x.recommended)||items[0];
+      if(!saved&&preferred)localModelSelect.value=preferred.id;
+      localProgressText(compatibility.supported?'Model catalogue ready. Choose a model and download it once on this device.':!compatibility.secure?'Local AI requires HTTPS.': 'No usable WebGPU adapter detected. Use cloud AI or another compatible browser/device.');
+    }catch(e){localModelSelect.innerHTML='<option value="">Could not load model catalogue</option>';localProgressText('Model catalogue error: '+(e.message||e));}
+    finally{localModelSelect.disabled=false;}
   }
   $('localAiCheck')?.addEventListener('click',async()=>{
-    try{const c=await window.MBBS_LOCAL_LLM.check();localProgressText(c.supported?'WebGPU is available. Select a model and download it.':'WebGPU is unavailable or this page is not securely loaded. Try a newer Safari, Chrome or Edge.');}
+    try{const c=await window.MBBS_LOCAL_LLM.check();localProgressText(c.supported?'WebGPU is available. Select a model and download it.':!c.secure?'HTTPS is required for local AI.':'No usable WebGPU adapter was found. Cloud AI remains available if enabled.');}
     catch(e){localProgressText(e.message||'Compatibility check failed.');}
   });
   $('localAiDownload')?.addEventListener('click',async()=>{
-    const id=localModelSelect?.value;if(!id){localProgressText('No compatible model is available for this device.');return;}
-    const b=$('localAiDownload');b.disabled=true;
-    try{await window.MBBS_LOCAL_LLM.load(id,p=>localProgressText(p?.text||'Downloading model…'));localProgressText('Model loaded and ready. It will be cached for future use on this device.');$('assistantMode').textContent='Local AI ready';}
-    catch(e){localProgressText('Unable to load model: '+(e.message||e));}
-    finally{b.disabled=false;}
+    const id=localModelSelect?.value;if(!id){localProgressText('No compatible model is selected. Reload the model catalogue.');return;}
+    const b=$('localAiDownload');b.disabled=true;b.textContent='Starting…';updateLocalProgress({text:'Connecting to WebLLM and preparing model…'});
+    try{
+      await window.MBBS_LOCAL_LLM.load(id,updateLocalProgress);
+      if(localProgressBar){localProgressBar.value=100;localProgressBar.setAttribute('value','100');}
+      if(localProgressPercent)localProgressPercent.textContent='100%';
+      localProgressText('Model loaded and ready. It is cached by this browser for future sessions.');$('assistantMode').textContent='Local AI ready';
+    }catch(e){if(localProgressBar){localProgressBar.value=0;localProgressBar.setAttribute('value','0');}if(localProgressPercent)localProgressPercent.textContent='Failed';localProgressText('Unable to load model: '+(e.message||e));}
+    finally{b.disabled=false;b.textContent='Download / load model';}
   });
-  $('localAiUnload')?.addEventListener('click',async()=>{try{await window.MBBS_LOCAL_LLM.unload();localProgressText(window.MBBS_LOCAL_LLM.status.progress);}catch(e){localProgressText(e.message||'Could not unload model.');}});
+  $('localAiUnload')?.addEventListener('click',async()=>{try{await window.MBBS_LOCAL_LLM.unload();localProgressText(window.MBBS_LOCAL_LLM.status.progress);if(localProgressBar){localProgressBar.value=0;localProgressBar.setAttribute('value','0');}if(localProgressPercent)localProgressPercent.textContent='0%';}catch(e){localProgressText(e.message||'Could not unload model.');}});
   window.addEventListener('mbbs-local-ai-status',e=>{if(e.detail?.progress)localProgressText(e.detail.progress);});
   populateLocalModels();
 
@@ -435,10 +472,13 @@
     input.value='';core.save();renderAssistant();$('assistantAsk').disabled=true;$('assistantMode').textContent='Thinking…';
     const pending={role:'assistant',content:'Checking your recent conversation and study data…',createdAt:new Date().toISOString(),pending:true};chat.messages.push(pending);renderAssistant();
     try {
-      const trackerContext=buildAssistantContext();
-      // Preserve the full transcript locally; send a compact recent window to avoid huge, slow requests.
-      const conversation=chat.messages.filter(m=>!m.pending).slice(-14).map(m=>({role:m.role,content:String(m.content||'').slice(0,3500),createdAt:m.createdAt||null}));
-      const result=await core.askAI(promptText,{conversation,tracker:trackerContext});
+      const trackerContext=buildAssistantContext(promptText);
+      // Keep the full transcript in the tracker, but send a bounded recent window plus a factual extractive digest.
+      const completeHistory=chat.messages.filter(m=>!m.pending);
+      const older=completeHistory.slice(0,-8).slice(-8);
+      chat.aiDigest=older.map(m=>(m.role==='user'?'User: ':'Assistant: ')+String(m.content||'').replace(/\s+/g,' ').slice(0,150)).join('\n').slice(0,1000);
+      const conversation=completeHistory.slice(-8).map(m=>({role:m.role,content:String(m.content||'').slice(-1200),createdAt:m.createdAt||null}));
+      const result=await core.askAI(promptText,{conversation,conversationSummary:chat.aiDigest||'',tracker:trackerContext});
       pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
       pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
       $('assistantMode').textContent=result.provider||result.model||'Local AI';
