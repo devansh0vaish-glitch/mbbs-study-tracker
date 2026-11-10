@@ -55,37 +55,47 @@ Deno.serve(async (req: Request) => {
     const modelFallbacks = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
     let aiResponse: Response | undefined;
     let activeModel = modelFallbacks[0];
+    let lastProviderStatus = 0;
 
+    // Retry transient 503 once; immediately fall back on 429 or timeout.
     for (const candidate of modelFallbacks) {
       activeModel = candidate;
-      let fallback = false;
+      let tryNextModel = false;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           aiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
             body: JSON.stringify({ model: candidate, input, store: false }),
-            signal: AbortSignal.timeout(18000),
+            signal: AbortSignal.timeout(14000),
           });
         } catch (e) {
-          console.warn(`Gemini request failed for ${candidate}`, e);
-          fallback = true;
+          console.warn(`Gemini request failed for ${candidate}; switching model`, e);
+          tryNextModel = true;
+          aiResponse = undefined;
           break;
         }
-        if (aiResponse.status === 503) {
-          if (attempt === 0) {
-            await new Promise(resolve => setTimeout(resolve, 900));
+        lastProviderStatus = aiResponse.status;
+        if (aiResponse.status === 429 || aiResponse.status === 503) {
+          if (aiResponse.status === 503 && attempt === 0) {
+            await new Promise(resolve => setTimeout(resolve, 600));
             continue;
           }
-          fallback = true;
+          console.warn(`Gemini ${candidate} returned ${aiResponse.status}; switching model.`);
+          tryNextModel = true;
+          aiResponse = undefined;
           break;
         }
         break;
       }
-      if (!fallback) break;
-      aiResponse = undefined;
+      if (!tryNextModel && aiResponse) break;
     }
-    if (!aiResponse) return json({ error: "Gemini primary and fallback models are temporarily unavailable. Please try again shortly." }, 503);
+    if (!aiResponse) {
+      const status = lastProviderStatus === 429 ? 429 : 503;
+      return json({ error: status === 429
+        ? "Gemini rate limit reached on both models. Please wait briefly and retry."
+        : "Gemini primary and fallback models timed out or are temporarily unavailable. Please try again shortly." }, status);
+    }
 
     const raw = await aiResponse.text();
     let result: any = {};
