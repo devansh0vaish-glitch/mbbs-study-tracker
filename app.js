@@ -8,7 +8,7 @@ let STORE="MBBS_STUDY_TRACKER_V9";
 let authMode="signin";
 const cloudEl=id=>document.getElementById(id);
 function setCloudStatus(text,kind=""){const e=cloudEl("cloudStatus");if(!e)return;e.textContent=text;e.className=kind?`cloud-${kind}`:"";}
-function meaningfulLocalData(){return Object.keys(state.done||{}).length||Object.keys(state.completionDates||{}).length||Object.keys(state.revision?.history||{}).length||state.todayTarget||state.backlog||state.custom?.added?.length||state.custom?.removed?.length||state.sessions?.length||Object.keys(state.topicNotes||{}).length||state.exams?.length||state.assessments?.length||Object.keys(state.planner?.days||{}).length||state.quickItems?.length||state.mistakes?.length||state.assistantHistory?.length||Object.keys(state.favourites||{}).length||state.preferences?.theme&&state.preferences.theme!=="system"||state.userGoals?.weeklyMinutes!==1200||state.userGoals?.weeklyTopics!==35;}
+function meaningfulLocalData(){return Object.keys(state.done||{}).length||Object.keys(state.completionDates||{}).length||Object.keys(state.revision?.history||{}).length||state.todayTarget||state.backlog||state.custom?.added?.length||state.custom?.removed?.length||state.sessions?.length||Object.keys(state.topicNotes||{}).length||state.exams?.length||state.assessments?.length||Object.keys(state.planner?.days||{}).length||state.quickItems?.length||state.mistakes?.length||state.assistantHistory?.length||state.assistantChats?.length||Object.keys(state.favourites||{}).length||state.preferences?.theme&&state.preferences.theme!=="system"||state.userGoals?.weeklyMinutes!==1200||state.userGoals?.weeklyTopics!==35;}
 async function pushCloud(){if(!supabaseClient||!cloudSession||!navigator.onLine){return} if(cloudBusy){cloudDirty=true;return} cloudBusy=true;cloudDirty=false;setCloudStatus("Cloud: syncing…");const hadOfflineEdits=!!state._offlineDirty;state._offlineDirty=false;try{const {error}=await supabaseClient.from("user_tracker_data").upsert({user_id:cloudSession.user.id,data:state,schema_version:2,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error)throw error;localStorage.setItem(STORE,JSON.stringify(state));setCloudStatus("Cloud: synced","ok")}catch(e){state._offlineDirty=hadOfflineEdits;console.error(e);setCloudStatus("Cloud: sync failed","error")}finally{cloudBusy=false;if(cloudDirty)queueCloudSync()}}
 function queueCloudSync(){if(!cloudSession)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(pushCloud,700)}
 async function pullCloud(){if(!cloudSession)return false;setCloudStatus("Cloud: loading…");const {data,error}=await supabaseClient.from("user_tracker_data").select("data,updated_at").eq("user_id",cloudSession.user.id).maybeSingle();if(error){setCloudStatus("Cloud: load failed","error");throw error}if(data?.data){if((state._offlineDirty||Number(state._savedAt||0)>Date.parse(data.updated_at||0)+5000)&&meaningfulLocalData()&&confirm("This device has local changes that may not exist in the cloud.\n\nOK = keep this device's data and upload it.\nCancel = replace it with the cloud data."))return false;localStorage.setItem(STORE,JSON.stringify(data.data));state={...defaults,...data.data,custom:{...defaults.custom,...(data.data.custom||{})},revision:{...defaults.revision,...(data.data.revision||{}),settings:{...defaults.revision.settings,...((data.data.revision||{}).settings||{})}}};return true}return false}
@@ -348,7 +348,7 @@ function commitSelection(){
 $("completeBtn").onclick=()=>{$("completeCount").disabled=false;$("completeCount").focus();$("selectionStatus").textContent="Choose how many topics to complete."};
 $("completeCount").onchange=()=>{const n=Number($("completeCount").value||0);if(!n||n>remainingProgress())return;state.selectionQuota=n;state.selectedTopics=[];save();renderSubjects();completeControls()};
 $("search").oninput=renderSubjects;
-$("saveGoal").onclick=()=>{ensureToday();if(state.targetSet)return;const n=Math.max(1,parseInt($("goalInput").value||"0",10));state.targetSet=true;state.todayTarget=n;state.goalTotal=Number(state.backlog||0)+n;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();renderAll()};
+$("saveGoal").onclick=()=>{ensureToday();if(state.targetSet)return;const n=Math.max(1,parseInt($("goalInput").value||"0",10));state.targetSet=true;state.todayTarget=n;state.goalTotal=Number(state.backlog||0)+Number(state.completedGoal||0)+n;state.selectionQuota=0;state.selectedTopics=[];save();renderAll()};
 
 function eligibility(k){return state.revision.eligibility[k]||"automatic"}
 function completionDate(k){return state.completionDates[k]||null}
@@ -518,6 +518,11 @@ window.MBBS_V36_CORE={
  iso,
  reconnect:async()=>{if(!supabaseClient||!navigator.onLine)return;try{const {data}=await supabaseClient.auth.getSession();if(data?.session){if(!cloudSession||cloudSession.user.id!==data.session.user.id)await startCloudSession(data.session);else queueCloudSync();}}catch(e){console.warn("V36 reconnect deferred",e);}},
  getUser:()=>cloudSession?.user||null,
+ getAccessToken:async()=>{try{const {data}=await supabaseClient.auth.getSession();return data?.session?.access_token||null}catch{return null}},
+ setDailyGoal:(target)=>{
+   const n=Number(target);if(!Number.isInteger(n)||n<1||n>100)return false;
+   ensureToday();state.targetSet=true;state.todayTarget=n;state.goalTotal=Number(state.backlog||0)+Number(state.completedGoal||0)+n;state.selectionQuota=0;state.selectedTopics=[];save();renderAll();return true;
+ },
  setTopicCompletion:(topicKey,completed=true)=>{
    const topic=find(topicKey); if(!topic)return false;
    const was=!!state.done[topicKey], next=!!completed;
@@ -531,15 +536,17 @@ window.MBBS_V36_CORE={
      else if(Number(state.todayTarget||0)>0)state.todayTarget--;
      state.activity??={};state.activity[today()]=Number(state.activity[today()]||0)+1;
    }else{
+     const wasCompletedToday=state.completionDates?.[topicKey]===today();
      delete state.done[topicKey];
      delete state.completionDates[topicKey];
-     state.backlog=Number(state.backlog||0)+1;
+     if(wasCompletedToday){state.completedGoal=Math.max(0,Number(state.completedGoal||0)-1);if(state.targetSet)state.todayTarget=Number(state.todayTarget||0)+1;}
+     else state.backlog=Number(state.backlog||0)+1;
    }
    state.selectionQuota=0;state.selectedTopics=[];
    save();renderAll();return true;
  },
  refresh:()=>renderAll(),
- askAI:async(message,context)=>{if(!supabaseClient||!cloudSession)throw new Error("Sign in with an internet connection to use live AI.");const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body:{message,context}});if(error)throw error;return data||{};}
+ askAI:async(message,context)=>{if(!window.MBBS_AI_PROVIDERS)throw new Error("AI provider adapter is missing.");if((window.MBBS_AI_CONFIG?.provider||"supabase-gemini")==="supabase-gemini"&&(!supabaseClient||!cloudSession))throw new Error("Sign in with an internet connection to use live AI.");return window.MBBS_AI_PROVIDERS.complete({message,context,invoke:async(body)=>{const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body});if(error)throw error;return data||{};},getAccessToken:()=>window.MBBS_V36_CORE?.getAccessToken?.()});}
 };
 renderAll();
 initCloud();

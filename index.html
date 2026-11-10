@@ -23,6 +23,13 @@
 <div id="authOverlay" class="auth-overlay">
 <div class="auth-card"><h2>MBBS Study Tracker</h2><p id="authStatus">Sign in to enable cloud sync.</p><div id="authForm"><div id="authDisplayNameRow" class="auth-display-name-row" hidden><input id="authUsername" type="text" maxlength="50" placeholder="Display name"></div><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Password"><div class="row"><button id="signInBtn" class="primary">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div></div><p id="authMsg" class="muted"></p></div></div>
 <header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>V36 • plan · focus · revise · improve</p></div></div></header>
+<nav id="nav">
+<button data-page="subjects" class="active"><i>📚</i>Subjects</button>
+<button data-page="goals"><i>🎯</i>Daily Goal</button>
+<button data-page="revision"><i>🔁</i>Revision</button>
+<button data-page="history"><i>🗓️</i>History</button>
+<button data-page="admin" id="adminNav" hidden><i>🛠️</i>Admin</button><button data-page="settings"><i>⚙️</i>Settings</button>
+</nav>
 <main>
 <section class="today card" id="todayCard"><div class="ring" id="goalRing"><b id="ringTxt">0/0</b></div><div class="today-txt"><h2>Today</h2><p class="muted" id="todaySub"></p><button class="primary" id="goRevision">Start revision</button></div></section>
 <section class="stats">
@@ -32,14 +39,6 @@
 <div class="stat"><span>Revision due</span><b id="revisionStat">0</b></div>
 </section>
 <div class="cloudbar"><span id="cloudStatus">Cloud: signed out</span><button id="syncNow" class="secondary">Sync now</button><button id="signOutBtn" class="secondary">Sign out</button></div>
-<nav id="nav">
-<button data-page="subjects" class="active"><i>📚</i>Subjects</button>
-<button data-page="goals"><i>🎯</i>Daily Goal</button>
-<button data-page="revision"><i>🔁</i>Revision</button>
-<button data-page="history"><i>🗓️</i>History</button>
-<button data-page="admin" id="adminNav" hidden><i>🛠️</i>Admin</button><button data-page="settings"><i>⚙️</i>Settings</button>
-</nav>
-
 <section id="subjects" class="page active">
 <div class="hero"><h2>Syllabus</h2><p>Completed topics stay green. Topic selection is available only through the daily-goal Complete system.</p></div>
 <input id="search" placeholder="Search subjects, headers or topics…">
@@ -98,6 +97,6 @@
 <div class="card"><h3>Backup</h3><div class="row"><button id="exportData" class="secondary">Export data</button><label class="filebtn">Import data<input id="importData" type="file" accept=".json"></label></div></div>
 </section>
 </main>
-<script src="syllabus.js"></script><script src="app.js"></script><script src="v36.js"></script>
+<script src="syllabus.js"></script><script src="ai-provider.js"></script><script src="app.js"></script><script src="v36.js"></script>
 <script>if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"))</script>
 </body></html>

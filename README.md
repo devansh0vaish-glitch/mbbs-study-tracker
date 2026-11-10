@@ -1,42 +1,67 @@
-# MBBS Study Tracker V36 — Assistant upgrade
+# MBBS Study Tracker V36 — AI, navigation and stability update
 
-This package retains the existing tracker and adds the agreed Assistant improvements.
+This is a complete replacement build based on the supplied V36 project. Existing tracker storage, Supabase authentication/cloud sync, syllabus and PWA structure are retained.
 
-## Assistant changes
-- Separate conversations with persistent history.
-- New chat, rename chat, delete chat.
-- Legacy flat assistant history is migrated into one conversation.
-- Only the active conversation's recent messages are sent to Gemini.
-- Gemini 3.8 Flash primary, Gemini Flash-Lite fallback; no paid-provider fallback.
-- Safe, basic Markdown rendering for AI messages.
-- AI can propose whitelisted tracker actions: complete selected topics, add planner tasks, or update planner settings.
-- Every proposed tracker change requires an explicit in-app confirmation.
-- Local rule-based recommendation is used only when live Gemini is unavailable.
+## What changed
 
-## Data preservation
-- Existing 19-subject syllabus, topic IDs, completion state, daily goals/backlog, revision history, account authentication, and Supabase JSON sync are retained.
-- New chat data is stored in the existing per-user `user_tracker_data.data` JSON document; no SQL migration is required.
-- The core exposes only a narrow topic-completion method to the Assistant. It does not permit arbitrary SQL, JavaScript, or direct database writes.
-- Existing `assistantHistory` is preserved and migrated to the new conversation format when no chat threads exist.
+### AI conversation context
+- Sends every message in the active conversation, in chronological order, including the latest user message.
+- No longer slices the conversation to the last 16 turns or deletes older messages after 60 turns.
+- Sends the current tracker state alongside the conversation: complete topic catalogue, completion states, daily goal, weekly goals, planner settings and saved planner tasks.
+- Server-side context allowance increased. The complete chat is placed first in the payload so it is preserved if an unusually large tracker snapshot reaches the request limit.
+- Assistant chats are counted as meaningful local data during cloud conflict checks, preventing chat-only local history from being overwritten on sign-in.
 
-## Files changed
-- `v36.js`: Assistant chat interface, chat persistence, safe response rendering, action validation and confirmation.
-- `v36.css`: responsive chat layout and message/action styling.
-- `app.js`: narrow core methods for safe topic completion and tracker refresh.
-- `sw.js`: cache version bump.
-- `supabase/functions/study-assistant/index.ts`: authenticated Gemini request, model fallback and structured action proposals.
+### Tracker actions (confirmation required)
+The assistant can propose:
+- Complete or reopen an exact syllabus topic.
+- Complete a set of topics (up to 30 per proposal).
+- Set today's new-topic goal.
+- Update weekly study-minute and topic goals.
+- Add or remove planner tasks.
+- Change planner capacity, daily new-topic limit and priority subject.
+
+The frontend validates identifiers, date ranges, limits and action types against the current tracker state. The user must confirm each proposal. The model cannot directly execute JavaScript or write to the database.
+
+### Provider-independent AI architecture
+`ai-provider.js` is the provider adapter. The chat UI calls the same `complete()` interface regardless of the selected model.
+
+Default configuration:
+```js
+window.MBBS_AI_CONFIG = {
+  provider: 'supabase-gemini',
+  endpoint: '',
+  sendTrackerContext: true,
+  timeoutMs: 60000
+};
+```
+
+Supported built-in modes:
+- `supabase-gemini` — current authenticated Supabase Edge Function and Gemini provider.
+- `private-endpoint` — a privately hosted endpoint that accepts `{ message, context }` and returns `{ reply, actions, model, provider }`. The app sends the signed-in user's Supabase access token as a Bearer token when available. Your server must validate it and enforce user-level authorization.
+- `offline` — reserved for a local model adapter. Register the adapter using `MBBS_AI_PROVIDERS.register('offline', { complete: async ({message, context, config}) => ({reply, actions: [], model: 'Local model'}) })`.
+
+To add another provider, register an adapter in `ai-provider.js` or a separately loaded script. It must implement `complete({message, context, config})` and return the same response shape. Keep provider secrets on the server; never put private API keys in browser files.
+
+### Layout and page persistence
+- Navigation is now outside the main page container and fixed as an independent scroll region on desktop/tablet.
+- Main content no longer controls the sidebar's position or scroll.
+- Mobile retains the bottom navigation rail.
+- The last selected page is saved locally and restored after reload, returning to the site, or authentication/cloud initialization. Overview is used only on first visit or if the saved page no longer exists.
+- Service worker cache version bumped to force updated assets to load.
 
 ## Deploy
-1. Back up the current repository and export your tracker data.
-2. Extract this ZIP and copy its root contents over the repository root, replacing matching files.
-3. Commit and push to the same GitHub Pages branch.
-4. Deploy `supabase/functions/study-assistant/index.ts` to your existing Supabase project as `study-assistant` with JWT verification enabled.
-5. Keep `GEMINI_API_KEY` only in Supabase Edge Function secrets. Do not put it in browser files.
-6. Hard-refresh the website. On iOS/iPadOS, close and reopen the installed PWA after deployment.
 
-## Important
-- The Edge Function uses the Gemini Interactions API and the configured model order. Confirm both model IDs are available to your Google AI Studio API key and free-tier quota in your region before deploying. No paid fallback is included.
-- The AI's proposed changes are validated again in the browser against current topic IDs and limits before the user can apply them.
-- Bulk topic completion and planner changes require confirmation. Review the proposal carefully before accepting.
-- Offline model downloads are intentionally not included; the offline model remains deferred. If Gemini is unavailable, the existing local rule-based assistant provides a fallback.
-- A live browser sign-in/cloud-sync test was not possible during packaging. Run a backup/export and verify sign-in, sync and AI function deployment after publishing.
+1. Back up your current repository and export tracker data before replacing files.
+2. Replace the repository contents with this ZIP, preserving your GitHub Pages repository settings.
+3. Deploy the Edge Function source at `supabase/functions/study-assistant/index.ts` to the existing Supabase project:
+   ```bash
+   supabase functions deploy study-assistant --project-ref rnjmgtttujzfjonvnaae
+   ```
+4. Ensure `GEMINI_API_KEY` is configured in Supabase Function Secrets. Do not add it to `ai-provider.js` or any browser code.
+5. Keep JWT verification enabled for the `study-assistant` function.
+6. Commit and push the replacement files. Open the site and perform a hard refresh / remove the installed PWA and re-add it if an old shell persists.
+
+## Important test status
+- JavaScript syntax checks and ZIP integrity checks pass.
+- The changes have not been deployed to GitHub Pages or Supabase from this environment.
+- A live Gemini request, private endpoint, offline model, browser/iPad layout and real cloud sync have not been end-to-end tested. Test with a backup account or exported data first.

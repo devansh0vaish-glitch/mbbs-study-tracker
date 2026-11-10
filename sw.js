@@ -1,6 +1,6 @@
-const CACHE_NAME = 'mbbs-v36-shell-3';
+const CACHE_NAME = 'mbbs-v36-shell-4';
 const CORE_ASSETS = [
-  './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js',
+  './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js', 'ai-provider.js',
   'syllabus.js', 'manifest.json',
   'assets/icon-192.png', 'assets/icon-512.png',
   'assets/apple-touch-icon.png', 'assets/favicon-32.png', 'assets/favicon-16.png'

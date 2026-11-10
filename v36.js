@@ -100,6 +100,8 @@
   core.save();
 
   function navigate(id){
+    if(!pages[id] && !document.getElementById(id)) return;
+    try{localStorage.setItem('MBBS_V36_LAST_PAGE',id)}catch{}
     document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
     document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
     if(id==='overview')renderOverview(); if(id==='planner')renderPlanner(); if(id==='focus')renderFocus(); if(id==='topichub')renderHub(); if(id==='analytics')renderAnalytics(); if(id==='examinations')renderExams(); if(id==='assessments')renderTests(); if(id==='assistant')renderAssistant();
@@ -107,7 +109,7 @@
   }
   nav.addEventListener('click',e=>{const b=e.target.closest('button[data-page]');if(!b||!pages[b.dataset.page])return;e.preventDefault();e.stopImmediatePropagation();navigate(b.dataset.page);});
   // Existing pages receive the same polished navigation behaviour on click.
-  nav.querySelectorAll('button[data-page]').forEach(b=>{if(pages[b.dataset.page])return; b.addEventListener('click',()=>{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page)?.classList.add('active');});});
+  nav.querySelectorAll('button[data-page]').forEach(b=>{if(pages[b.dataset.page])return; b.addEventListener('click',()=>{try{localStorage.setItem('MBBS_V36_LAST_PAGE',b.dataset.page)}catch{};document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page)?.classList.add('active');});});
 
   const subjectOptions = () => core.subjects().map(s=>`<option value="${esc(s)}">${esc(core.subjectLabel(s))}</option>`).join('');
   const topicOptions = () => topics().map(x=>`<option value="${esc(x.k)}">${esc(core.subjectLabel(x.s))} · ${esc(x.h)} · ${esc(x.t.title)}</option>`).join('');
@@ -330,6 +332,10 @@
   }
   function describeAssistantAction(a) {
     if(a.type==='complete_topics')return `Mark ${a.topicKeys?.length||0} topic(s) completed`;
+    if(a.type==='set_topic_completion')return `${a.completed?'Complete':'Reopen'} topic: ${topics().find(x=>x.k===a.topicKey)?.t.title||a.topicKey}`;
+    if(a.type==='set_daily_goal')return `Set today's target to ${a.target} new topic(s)`;
+    if(a.type==='update_user_goals')return `Update weekly goals${a.weeklyMinutes!==undefined?' · '+a.weeklyMinutes+' study minutes':''}${a.weeklyTopics!==undefined?' · '+a.weeklyTopics+' topics':''}`;
+    if(a.type==='remove_planner_tasks')return `Remove ${a.taskIds?.length||0} planner task(s)`;
     if(a.type==='add_planner_tasks')return `Add ${a.tasks?.length||0} task(s) to the planner`;
     if(a.type==='update_planner_settings')return `Update planner settings${a.availableMinutes?` · ${a.availableMinutes} min/day`:''}`;
     return 'Unrecognised tracker action';
@@ -337,44 +343,44 @@
   function validateAssistantAction(a) {
     if(!a||typeof a!=='object')return false;
     const all=topics(), validKeys=new Set(all.map(x=>x.k));
-    if(a.type==='complete_topics')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=20&&a.topicKeys.every(k=>validKeys.has(k));
-    if(a.type==='add_planner_tasks')return Array.isArray(a.tasks)&&a.tasks.length>0&&a.tasks.length<=14&&a.tasks.every(t=>validKeys.has(t.topicKey)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&['study','revision'].includes(t.type)&&Number.isFinite(Number(t.minutes))&&Number(t.minutes)>=5&&Number(t.minutes)<=240);
+    if(a.type==='complete_topics')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=30&&a.topicKeys.every(k=>validKeys.has(k));
+    if(a.type==='add_planner_tasks')return Array.isArray(a.tasks)&&a.tasks.length>0&&a.tasks.length<=14&&a.tasks.every(t=>{const d=Date.parse(t.date+'T12:00:00');return validKeys.has(t.topicKey)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&Number.isFinite(d)&&t.date>=today()&&['study','revision'].includes(t.type)&&Number.isFinite(Number(t.minutes))&&Number(t.minutes)>=5&&Number(t.minutes)<=240;});
     if(a.type==='update_planner_settings')return (a.availableMinutes===undefined||(Number.isInteger(a.availableMinutes)&&a.availableMinutes>=30&&a.availableMinutes<=960))&&(a.newLimit===undefined||(Number.isInteger(a.newLimit)&&a.newLimit>=1&&a.newLimit<=30))&&(a.prioritySubject===undefined||a.prioritySubject===''||core.subjects().includes(a.prioritySubject));
+    if(a.type==='set_topic_completion')return validKeys.has(a.topicKey)&&typeof a.completed==='boolean';
+    if(a.type==='set_daily_goal')return Number.isInteger(a.target)&&a.target>=1&&a.target<=100;
+    if(a.type==='update_user_goals')return (a.weeklyMinutes!==undefined||a.weeklyTopics!==undefined)&&(a.weeklyMinutes===undefined||(Number.isInteger(a.weeklyMinutes)&&a.weeklyMinutes>=60&&a.weeklyMinutes<=10080))&&(a.weeklyTopics===undefined||(Number.isInteger(a.weeklyTopics)&&a.weeklyTopics>=1&&a.weeklyTopics<=300));
+    if(a.type==='remove_planner_tasks'){const ids=new Set(Object.values(state().planner?.days||{}).flatMap(p=>(p?.tasks||[]).map(t=>t.id)));return Array.isArray(a.taskIds)&&a.taskIds.length>0&&a.taskIds.length<=30&&a.taskIds.every(id=>ids.has(id));}
     return false;
   }
   function applyAssistantProposal(token) {
     const [mi,ai]=token.split(':').map(Number), chat=activeChat(), msg=chat?.messages?.[mi], action=msg?.actions?.[ai];
-    if(!action||action.applied||!validateAssistantAction(action))return alert('This suggested change is invalid or no longer matches your syllabus.');
+    if(!action||action.applied||!validateAssistantAction(action))return alert('This suggested change is invalid or no longer matches your tracker.');
     const summary=describeAssistantAction(action);
-    if(!confirm(`Apply this change to your tracker?\n\n${summary}\n\nThis will save to your existing tracker data and sync when online.`))return;
+    if(!confirm(`Apply this change to your tracker?\n\n${summary}\n\nYour tracker data will be saved and synced when online.`))return;
     const s=state();
-    if(action.type==='complete_topics') {
-      for(const k of action.topicKeys) if(!core.setTopicCompletion(k,true)) return alert('A topic could not be updated. No further changes were applied.');
-    } else if(action.type==='add_planner_tasks') {
-      s.planner ||= {availableMinutes:240,newLimit:5,days:{},completed:{}};
-      s.planner.days ||= {};
-      for(const t of action.tasks) {
-        const topic=topics().find(x=>x.k===t.topicKey); if(!topic)continue;
-        const plan=s.planner.days[t.date] ||= {date:t.date,minutes:Number(s.planner.availableMinutes||240),createdAt:Date.now(),tasks:[],bufferMinutes:0,revisionMinutes:0};
-        plan.tasks ||= [];
-        plan.tasks.push({id:'ai-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),date:t.date,type:t.type,topicKey:t.topicKey,title:t.type==='revision'?'Revise: '+topic.t.title:topic.t.title,subject:topic.s,header:topic.h,minutes:Number(t.minutes),createdAt:Date.now(),source:'assistant'});
+    try {
+      if(action.type==='complete_topics') action.topicKeys.forEach(k=>core.setTopicCompletion(k,true));
+      else if(action.type==='set_topic_completion') core.setTopicCompletion(action.topicKey,action.completed);
+      else if(action.type==='set_daily_goal') core.setDailyGoal(action.target);
+      else if(action.type==='update_user_goals'){s.userGoals||={};if(action.weeklyMinutes!==undefined)s.userGoals.weeklyMinutes=action.weeklyMinutes;if(action.weeklyTopics!==undefined)s.userGoals.weeklyTopics=action.weeklyTopics;}
+      else if(action.type==='add_planner_tasks') {
+        s.planner ||= {availableMinutes:240,newLimit:5,days:{},completed:{}}; s.planner.days ||= {};
+        for(const t of action.tasks){const topic=topics().find(x=>x.k===t.topicKey);const plan=s.planner.days[t.date] ||= {date:t.date,minutes:Number(s.planner.availableMinutes||240),createdAt:Date.now(),tasks:[],bufferMinutes:0,revisionMinutes:0};plan.tasks ||= [];plan.tasks.push({id:'ai-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),date:t.date,type:t.type,topicKey:t.topicKey,title:t.type==='revision'?'Revise: '+topic.t.title:topic.t.title,subject:topic.s,header:topic.h,minutes:Number(t.minutes),createdAt:Date.now(),source:'assistant'});}
+        s.planner.generatedAt=Date.now();
+      } else if(action.type==='remove_planner_tasks') {
+        for(const plan of Object.values(s.planner?.days||{})){plan.tasks=(plan.tasks||[]).filter(t=>!action.taskIds.includes(t.id));}
+      } else if(action.type==='update_planner_settings') {
+        s.planner ||= {}; if(action.availableMinutes!==undefined)s.planner.availableMinutes=action.availableMinutes;if(action.newLimit!==undefined)s.planner.newLimit=action.newLimit;if(action.prioritySubject!==undefined)s.planner.prioritySubject=action.prioritySubject;
       }
-      s.planner.generatedAt=Date.now(); core.save();
-    } else if(action.type==='update_planner_settings') {
-      s.planner ||= {};
-      if(action.availableMinutes!==undefined)s.planner.availableMinutes=action.availableMinutes;
-      if(action.newLimit!==undefined)s.planner.newLimit=action.newLimit;
-      if(action.prioritySubject!==undefined)s.planner.prioritySubject=action.prioritySubject;
-      core.save();
-    }
-    action.applied=true; action.appliedAt=new Date().toISOString(); core.save();
-    window.MBBS_V36_REFRESH?.(); renderAssistant();
-    alert('Tracker updated successfully.');
+      action.applied=true;action.appliedAt=new Date().toISOString();core.save();window.MBBS_V36_REFRESH?.();renderAssistant();alert('Tracker updated successfully.');
+    } catch(err){console.error('Assistant action failed',err);alert('The tracker could not apply this change: '+(err.message||'Unknown error'));}
   }
   function buildAssistantContext() {
     const base=buildLocalInsights(), s=state();
-    const catalog=topics().slice(0,110).map(x=>({topicKey:x.k,subject:core.subjectLabel(x.s),header:x.h,title:x.t.title,done:!!s.done[x.k],duration:x.t.duration||''}));
-    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',plannedDates:Object.keys(s.planner?.days||{}).slice(-10)}};
+    // Supply the complete live syllabus catalogue so the model can target exact topic keys.
+    const catalog=topics().map(x=>({topicKey:x.k,subject:core.subjectLabel(x.s),header:x.h,title:x.t.title,done:!!s.done[x.k],duration:x.t.duration||''}));
+    const days=Object.entries(s.planner?.days||{}).map(([date,p])=>({date,tasks:(p?.tasks||[]).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
+    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})},preferences:{...(s.preferences||{})}};
   }
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
@@ -382,29 +388,22 @@
   async function sendAssistantMessage() {
     const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
     const chat=ensureAssistantChat(), now=new Date().toISOString();
-    chat.messages.push({role:'user',content:promptText,createdAt:now}); chat.updatedAt=now;
+    chat.messages.push({role:'user',content:promptText,createdAt:now});chat.updatedAt=now;
     if(chat.title==='New conversation')chat.title=promptText.slice(0,48)+(promptText.length>48?'…':'');
-    input.value=''; core.save(); renderAssistant();
-    $('assistantAsk').disabled=true; $('assistantMode').textContent='Thinking…';
-    const pending={role:'assistant',content:'Thinking through your tracker data…',createdAt:new Date().toISOString(),pending:true};
-    chat.messages.push(pending); renderAssistant();
+    input.value='';core.save();renderAssistant();$('assistantAsk').disabled=true;$('assistantMode').textContent='Thinking…';
+    const pending={role:'assistant',content:'Reviewing the full conversation and your live tracker data…',createdAt:new Date().toISOString(),pending:true};chat.messages.push(pending);renderAssistant();
     try {
-      const context=buildAssistantContext();
-      const history=chat.messages.filter(m=>!m.pending).slice(0,-1).slice(-16).map(m=>({role:m.role,content:m.content}));
-      const result=await core.askAI(promptText,{...context,conversation:history});
-      pending.pending=false; pending.model=result.model||'Gemini';
-      pending.content=result.reply||'I could not generate a response.';
-      pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,5):[];
-      $('assistantMode').textContent='Gemini connected';
+      const trackerContext=buildAssistantContext();
+      // Send every prior turn, in order, including the latest user message. No tail slicing.
+      const conversation=chat.messages.filter(m=>!m.pending).map(m=>({role:m.role,content:String(m.content||''),createdAt:m.createdAt||null}));
+      const result=await core.askAI(promptText,{conversation,tracker:trackerContext});
+      pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
+      pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
+      $('assistantMode').textContent=result.provider||result.model||'AI connected';
     } catch(err) {
-      pending.pending=false; pending.model='Local fallback';
-      pending.content=assistantAnswer(promptText)+'\n\n_Gemini unavailable: '+(err.message||'request failed')+'. This fallback is generated locally from your tracker data._';
-      pending.actions=[];
-      $('assistantMode').textContent='Local fallback';
+      pending.pending=false;pending.model='Local fallback';pending.content=assistantAnswer(promptText)+'\n\n_AI provider unavailable: '+(err.message||'request failed')+'. This response is based on locally available tracker data; no AI action was applied._';pending.actions=[];$('assistantMode').textContent='Local fallback';
     } finally {
-      chat.updatedAt=new Date().toISOString();
-      chat.messages=chat.messages.slice(-60);
-      core.save(); renderAssistant(); $('assistantAsk').disabled=false;
+      chat.updatedAt=new Date().toISOString();core.save();renderAssistant();$('assistantAsk').disabled=false;
     }
   }
   $('assistantAsk').onclick=sendAssistantMessage;
@@ -438,9 +437,10 @@
   // Make feature pages refresh when returning to them.
   window.addEventListener('focus',()=>{const active=document.querySelector('.page.active')?.id;if(active&&pages[active]){({overview:renderOverview,planner:renderPlanner,focus:renderFocus,topichub:renderHub,analytics:renderAnalytics,examinations:renderExams,assessments:renderTests,assistant:renderAssistant}[active]||(()=>{}))();}});
   window.MBBS_V36_REFRESH=()=>{renderOverview();renderPlanner();renderFocus();renderHub();renderAnalytics();renderExams();renderTests();renderAssistant();};
-  window.MBBS_V36_ACTIVATE_OVERVIEW=()=>navigate('overview');
-  // First-run dashboard nav uses the new modern pages without hiding existing screens.
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));$('overview').classList.add('active');$('nav-overview').classList.add('active');
+  window.MBBS_V36_ACTIVATE_OVERVIEW=()=>{let id='overview';try{id=localStorage.getItem('MBBS_V36_LAST_PAGE')||'overview'}catch{};if(!document.getElementById(id))id='overview';navigate(id)};
+  // Restore the last page; do not reset users to Overview on every load.
+  let initialPage='overview';try{initialPage=localStorage.getItem('MBBS_V36_LAST_PAGE')||'overview'}catch{};if(!document.getElementById(initialPage))initialPage='overview';
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));$(initialPage).classList.add('active');$(`nav-${initialPage}`)?.classList.add('active');
   renderOverview();renderPlanner();renderFocus();renderHub();renderAnalytics();renderExams();renderTests();renderAssistant();
   console.info('MBBS Study Tracker V36 modules loaded');
 })();
