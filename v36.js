@@ -50,10 +50,23 @@
       <div class="v36-card"><h3>Record a test</h3><div class="v36-formgrid"><label>Test name<input id="testName" placeholder="e.g. Marrow GT 01"></label><label>Date<input id="testDate" type="date"></label><label>Subject<select id="testSubject"></select></label><label>Marks obtained<input id="testScore" type="number" min="0" step="any"></label><label>Total marks<input id="testTotal" type="number" min="1" step="any"></label></div><label>Mistake category<select id="testMistakeType"><option value="knowledge">Knowledge gap</option><option value="conceptual">Conceptual error</option><option value="memory">Memory error</option><option value="misinterpretation">Misinterpretation</option><option value="careless">Careless / silly mistake</option></select></label><label>Test notes / mistakes<textarea id="testMistakes" rows="3" placeholder="What went wrong? Which concepts need work?"></textarea></label><label>Link a syllabus topic<select id="testTopic"><option value="">No linked topic</option></select></label><button class="v36-btn primary" id="saveTest">Save assessment</button></div>
       <div class="v36-grid"><div class="v36-card"><h3>Performance summary</h3><div id="testSummary"></div></div><div class="v36-card"><h3>Score trend</h3><div id="testTrend"></div></div></div>
       <div class="v36-card"><h3>Assessment history</h3><div id="testHistory"></div></div>`,
-    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Get suggestions based on your syllabus, revision queue, planner and exam dates.</p></div><span class="v36-pill" id="assistantMode">Built-in planner</span></div>
-      <div class="v36-notice"><b>Privacy & AI:</b> Local study intelligence runs on this device and refreshes from your tracker data. Optional free Gemini AI sends your question and a limited study summary through an authenticated Supabase Edge Function. Google free-tier data may be used to improve its products, so do not include sensitive information. No paid fallback is used and no API key is stored in this website.</div>
-      <div class="v36-card"><div class="v36-suggestions"><button data-prompt="I have 3 hours today. What should I study?">Plan 3 hours today</button><button data-prompt="Which subjects are weakest?">Find my weakest subjects</button><button data-prompt="What revisions are overdue?">Show overdue revision</button><button data-prompt="Analyse my progress this week">Analyse this week</button></div><label>Ask about your study progress<textarea id="assistantPrompt" rows="3" placeholder="e.g. I have 2 hours and my Pathology exam is in 12 days..."></textarea></label><button class="v36-btn primary" id="assistantAsk">Get recommendation</button><div id="assistantResponse" class="v36-response" aria-live="polite"></div></div>
-      <div class="v36-card"><div class="v36-cardhead"><h3>Live study intelligence</h3><span class="v36-pill" id="assistantUpdated">Updating from tracker…</span></div><p class="muted">Automatically recalculated from your latest syllabus, revision, exam, assessment and focus-session data whenever this page opens or tracker data changes.</p><div id="assistantInsights"></div></div><div class="v36-card"><h3>Study snapshot</h3><div id="assistantSnapshot"></div></div>`
+    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">A separate, persistent conversation space for your study workflow.</p></div><span class="v36-pill" id="assistantMode">Gemini ready</span></div>
+      <div class="v36-chat-shell">
+        <aside class="v36-chat-sidebar">
+          <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
+          <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
+          <p class="v36-chat-privacy">Chats are saved with your tracker account. Only the active conversation is sent as chat history to Gemini.</p>
+        </aside>
+        <section class="v36-chat-main">
+          <div class="v36-chat-toolbar"><strong id="assistantChatTitle">New conversation</strong><button type="button" class="v36-mini" id="assistantRenameChat">Rename</button></div>
+          <div class="v36-chat-messages" id="assistantMessages" aria-live="polite"></div>
+          <div class="v36-chat-composer">
+            <div class="v36-suggestions"><button data-prompt="I have 3 hours today. What should I study?">Plan 3 hours</button><button data-prompt="Which subjects are weakest?">Weak subjects</button><button data-prompt="What revisions are overdue?">Overdue revision</button><button data-prompt="Analyse my progress this week">Weekly progress</button></div>
+            <textarea id="assistantPrompt" rows="3" placeholder="Ask about your study plan, syllabus, revisions or progress…"></textarea>
+            <div class="v36-chat-compose-footer"><small>Enter to send · Shift + Enter for a new line</small><button class="v36-btn primary" id="assistantAsk">Send message ↑</button></div>
+          </div>
+        </section>
+      </div>`
   };
   Object.entries(pages).forEach(([id,html])=>{ if(!$(`${id}`)){const s=document.createElement('section');s.id=id;s.className='page v36-page';s.innerHTML=html;document.querySelector('main').appendChild(s);} });
 
@@ -69,6 +82,20 @@
   st.focus = {mode:'pomodoro',duration:1500,elapsed:0,startedAt:null,sessionStartedAt:null,paused:true,break:false,subject:'',topicKey:'',...(st.focus||{})};
   st.preferences = {theme:'system',...(st.preferences||{})};
   st.assistantHistory = Array.isArray(st.assistantHistory) ? st.assistantHistory : [];
+  st.assistantChats = Array.isArray(st.assistantChats) ? st.assistantChats : [];
+  st.assistantActiveChatId = st.assistantActiveChatId || null;
+  if (!st.assistantChats.length && st.assistantHistory.length) {
+    const legacy = st.assistantHistory.slice(-30).flatMap(x => [
+      { role: 'user', content: String(x.prompt || ''), createdAt: x.date || new Date().toISOString() },
+      { role: 'assistant', content: String(x.reply || ''), model: x.model || '', createdAt: x.date || new Date().toISOString(), actions: [] }
+    ]).filter(x => x.content);
+    if (legacy.length) {
+      const id = 'chat-' + Date.now().toString(36);
+      st.assistantChats.push({ id, title: 'Previous assistant history', createdAt: legacy[0].createdAt, updatedAt: legacy.at(-1).createdAt, messages: legacy });
+      st.assistantActiveChatId = id;
+    }
+  }
+
   st.quickItems = Array.isArray(st.quickItems) ? st.quickItems : [];
   core.save();
 
@@ -245,21 +272,148 @@
     return `Suggested ${Math.round(mins/60*10)/10}-hour study block based on your latest tracker data:\n\n${revMinutes?`1. Revise due topics — ${revMinutes} minutes\n`:''}${prioritized.map((x,i)=>`${i+(revMinutes?2:1)}. ${core.subjectLabel(x.s)} · ${x.t.title} — approx. ${durationMinutes(x.t.duration)} min`).join('\n')||'Use this time for active recall and consolidation.'}\n\nYour highest-priority alert: ${z.rec[0].title}. Keep a 10–15 minute buffer. Generate a formal plan in Planner to save and track tasks.`;
   }
   function buildAssistantContext(){const z=buildLocalInsights(),s=state();return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};}
-  $('assistantAsk').onclick=async()=>{const p=$('assistantPrompt').value.trim();if(!p)return;const localAnswer=assistantAnswer(p),context=buildAssistantContext();$('assistantResponse').innerHTML=`<b>Local study recommendation</b><pre>${esc(localAnswer)}</pre><small>Calculated from your latest saved tracker data. Checking free live AI if configured…</small>`;$('assistantAsk').disabled=true;try{const result=await core.askAI(p,context);if(result.reply){$('assistantMode').textContent='Free cloud AI connected';$('assistantResponse').innerHTML=`<b>AI study recommendation</b><pre>${esc(result.reply)}</pre><small>Generated with ${esc(result.model||'configured free model')}. Suggestions do not modify tracker data automatically.</small>`;state().assistantHistory||=[];state().assistantHistory.push({date:new Date().toISOString(),prompt:p,reply:result.reply,model:result.model||''});state().assistantHistory=state().assistantHistory.slice(-30);core.save();}else throw new Error('No AI response was returned.');}catch(err){$('assistantMode').textContent='Offline study intelligence';$('assistantResponse').innerHTML=`<b>Local study recommendation</b><pre>${esc(localAnswer)}</pre><small>Free live AI unavailable: ${esc(err.message||'Free quota unavailable or function not configured')}. No paid service was used.</small>`;}finally{$('assistantAsk').disabled=false;}};
-  document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('assistantPrompt').value=b.dataset.prompt;$('assistantAsk').click();});
-  function renderAssistant(){
-    const z=buildLocalInsights(),all=z.all,minutes=state().sessions.reduce((a,x)=>a+x.seconds,0)/60;
-    $('assistantMode').textContent=navigator.onLine?'Offline intelligence ready · free AI optional':'Offline intelligence · offline mode';
-    $('assistantUpdated').textContent=`Updated ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
-    $('assistantSnapshot').innerHTML=`<div class="v36-grid v36-grid-4"><div><b class="v36-number">${Math.round(z.done.length/Math.max(1,all.length)*100)}%</b><small>Syllabus completion</small></div><div><b class="v36-number">${Math.round(minutes/60*10)/10}h</b><small>Total focus time</small></div><div><b class="v36-number">${z.due.length}</b><small>Revisions due</small></div><div><b class="v36-number">${z.completedThisWeek}</b><small>Topics this week</small></div></div>`;
-    $('assistantInsights').innerHTML=z.rec.map((r,i)=>`<div class="v36-insight"><div class="v36-insight-main"><span class="v36-insight-tag">${esc(r.tag)}</span><b>${esc(r.title)}</b><p>${esc(r.body)}</p></div><button class="v36-mini" data-insight-page="${esc(r.page)}">${esc(r.action)}</button></div>`).join('');
-    $('assistantInsights').querySelectorAll('[data-insight-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.insightPage));
+  // Persistent multi-chat Assistant. Conversation data lives in the existing synced state JSON.
+  const newChatId = () => 'chat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
+  const activeChat = () => state().assistantChats.find(c => c.id === state().assistantActiveChatId) || null;
+  function ensureAssistantChat() {
+    const s = state();
+    s.assistantChats = Array.isArray(s.assistantChats) ? s.assistantChats : [];
+    let chat = activeChat();
+    if (!chat) {
+      chat = { id:newChatId(), title:'New conversation', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), messages:[] };
+      s.assistantChats.unshift(chat); s.assistantActiveChatId = chat.id; core.save();
+    }
+    return chat;
   }
-  // Refresh from current in-memory state whenever the assistant is revisited, app regains focus,
-  // visibility returns, cloud sync/import completes, or the core triggers MBBS_V36_REFRESH.
+  function createAssistantChat() {
+    const s=state(), chat={id:newChatId(),title:'New conversation',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[]};
+    s.assistantChats.unshift(chat); s.assistantActiveChatId=chat.id; core.save(); renderAssistant();
+    $('assistantPrompt')?.focus();
+  }
+  function renderAssistantMarkdown(value) {
+    let html=esc(value ?? '');
+    html=html.replace(/^### (.+)$/gm,'<h4>$1</h4>').replace(/^## (.+)$/gm,'<h3>$1</h3>').replace(/^# (.+)$/gm,'<h3>$1</h3>');
+    html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code>$1</code>');
+    html=html.replace(/^\s*[-•] (.+)$/gm,'<li>$1</li>');
+    html=html.replace(/(?:<li>.*<\/li>\n?)+/g,m=>'<ul>'+m+'</ul>');
+    html=html.replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br>');
+    return '<p>'+html+'</p>';
+  }
+  function renderAssistant() {
+    const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
+    $('assistantChatTitle').textContent=chat.title || 'New conversation';
+    $('assistantMode').textContent=navigator.onLine?'Gemini · connected when signed in':'Offline · local fallback';
+    list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
+    messages.innerHTML=(chat.messages||[]).map((m,i)=>{
+      const role=m.role==='user'?'user':'assistant';
+      const actions=Array.isArray(m.actions)&&m.actions.length?`<div class="v36-ai-actions"><b>Suggested tracker changes</b>${m.actions.map((a,j)=>`<div class="v36-ai-action"><span>${esc(describeAssistantAction(a))}</span><button type="button" class="v36-mini primary" data-assistant-apply="${i}:${j}" ${a.applied?'disabled':''}>${a.applied?'Applied':'Review & apply'}</button></div>`).join('')}</div>`:'';
+      return `<article class="v36-message ${role}"><div class="v36-message-label">${role==='user'?'You':'Study Assistant'}</div><div class="v36-message-content">${renderAssistantMarkdown(m.content||'')}</div>${actions}<small class="v36-message-time">${m.createdAt?new Date(m.createdAt).toLocaleString():''}${m.model?' · '+esc(m.model):''}</small></article>`;
+    }).join('') || '<div class="v36-chat-empty"><div class="v36-chat-empty-icon">✦</div><h3>What would you like to work on?</h3><p>Ask for a study plan, review your progress, or ask me to prepare changes to your tracker.</p></div>';
+    messages.scrollTop=messages.scrollHeight;
+    list.querySelectorAll('[data-chat-open]').forEach(b=>b.onclick=()=>{state().assistantActiveChatId=b.dataset.chatOpen;core.save();renderAssistant();});
+    list.querySelectorAll('[data-chat-rename]').forEach(b=>b.onclick=()=>renameAssistantChat(b.dataset.chatRename));
+    list.querySelectorAll('[data-chat-delete]').forEach(b=>b.onclick=()=>deleteAssistantChat(b.dataset.chatDelete));
+    messages.querySelectorAll('[data-assistant-apply]').forEach(b=>b.onclick=()=>applyAssistantProposal(b.dataset.assistantApply));
+  }
+  function renameAssistantChat(id) {
+    const c=state().assistantChats.find(x=>x.id===id); if(!c)return;
+    const name=prompt('Rename conversation',c.title||'New conversation');
+    if(name===null)return;
+    c.title=name.trim().slice(0,70)||'New conversation'; c.updatedAt=new Date().toISOString(); core.save(); renderAssistant();
+  }
+  function deleteAssistantChat(id) {
+    const c=state().assistantChats.find(x=>x.id===id); if(!c)return;
+    if(!confirm(`Delete "${c.title||'New conversation'}" and its messages? This cannot be undone.`))return;
+    const s=state(); s.assistantChats=s.assistantChats.filter(x=>x.id!==id);
+    if(s.assistantActiveChatId===id)s.assistantActiveChatId=s.assistantChats[0]?.id||null;
+    core.save(); renderAssistant();
+  }
+  function describeAssistantAction(a) {
+    if(a.type==='complete_topics')return `Mark ${a.topicKeys?.length||0} topic(s) completed`;
+    if(a.type==='add_planner_tasks')return `Add ${a.tasks?.length||0} task(s) to the planner`;
+    if(a.type==='update_planner_settings')return `Update planner settings${a.availableMinutes?` · ${a.availableMinutes} min/day`:''}`;
+    return 'Unrecognised tracker action';
+  }
+  function validateAssistantAction(a) {
+    if(!a||typeof a!=='object')return false;
+    const all=topics(), validKeys=new Set(all.map(x=>x.k));
+    if(a.type==='complete_topics')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=20&&a.topicKeys.every(k=>validKeys.has(k));
+    if(a.type==='add_planner_tasks')return Array.isArray(a.tasks)&&a.tasks.length>0&&a.tasks.length<=14&&a.tasks.every(t=>validKeys.has(t.topicKey)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&['study','revision'].includes(t.type)&&Number.isFinite(Number(t.minutes))&&Number(t.minutes)>=5&&Number(t.minutes)<=240);
+    if(a.type==='update_planner_settings')return (a.availableMinutes===undefined||(Number.isInteger(a.availableMinutes)&&a.availableMinutes>=30&&a.availableMinutes<=960))&&(a.newLimit===undefined||(Number.isInteger(a.newLimit)&&a.newLimit>=1&&a.newLimit<=30))&&(a.prioritySubject===undefined||a.prioritySubject===''||core.subjects().includes(a.prioritySubject));
+    return false;
+  }
+  function applyAssistantProposal(token) {
+    const [mi,ai]=token.split(':').map(Number), chat=activeChat(), msg=chat?.messages?.[mi], action=msg?.actions?.[ai];
+    if(!action||action.applied||!validateAssistantAction(action))return alert('This suggested change is invalid or no longer matches your syllabus.');
+    const summary=describeAssistantAction(action);
+    if(!confirm(`Apply this change to your tracker?\n\n${summary}\n\nThis will save to your existing tracker data and sync when online.`))return;
+    const s=state();
+    if(action.type==='complete_topics') {
+      for(const k of action.topicKeys) if(!core.setTopicCompletion(k,true)) return alert('A topic could not be updated. No further changes were applied.');
+    } else if(action.type==='add_planner_tasks') {
+      s.planner ||= {availableMinutes:240,newLimit:5,days:{},completed:{}};
+      s.planner.days ||= {};
+      for(const t of action.tasks) {
+        const topic=topics().find(x=>x.k===t.topicKey); if(!topic)continue;
+        const plan=s.planner.days[t.date] ||= {date:t.date,minutes:Number(s.planner.availableMinutes||240),createdAt:Date.now(),tasks:[],bufferMinutes:0,revisionMinutes:0};
+        plan.tasks ||= [];
+        plan.tasks.push({id:'ai-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),date:t.date,type:t.type,topicKey:t.topicKey,title:t.type==='revision'?'Revise: '+topic.t.title:topic.t.title,subject:topic.s,header:topic.h,minutes:Number(t.minutes),createdAt:Date.now(),source:'assistant'});
+      }
+      s.planner.generatedAt=Date.now(); core.save();
+    } else if(action.type==='update_planner_settings') {
+      s.planner ||= {};
+      if(action.availableMinutes!==undefined)s.planner.availableMinutes=action.availableMinutes;
+      if(action.newLimit!==undefined)s.planner.newLimit=action.newLimit;
+      if(action.prioritySubject!==undefined)s.planner.prioritySubject=action.prioritySubject;
+      core.save();
+    }
+    action.applied=true; action.appliedAt=new Date().toISOString(); core.save();
+    window.MBBS_V36_REFRESH?.(); renderAssistant();
+    alert('Tracker updated successfully.');
+  }
+  function buildAssistantContext() {
+    const base=buildLocalInsights(), s=state();
+    const catalog=topics().slice(0,110).map(x=>({topicKey:x.k,subject:core.subjectLabel(x.s),header:x.h,title:x.t.title,done:!!s.done[x.k],duration:x.t.duration||''}));
+    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',plannedDates:Object.keys(s.planner?.days||{}).slice(-10)}};
+  }
+  function buildContextBase(z,s) {
+    return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
+  }
+  async function sendAssistantMessage() {
+    const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
+    const chat=ensureAssistantChat(), now=new Date().toISOString();
+    chat.messages.push({role:'user',content:promptText,createdAt:now}); chat.updatedAt=now;
+    if(chat.title==='New conversation')chat.title=promptText.slice(0,48)+(promptText.length>48?'…':'');
+    input.value=''; core.save(); renderAssistant();
+    $('assistantAsk').disabled=true; $('assistantMode').textContent='Thinking…';
+    const pending={role:'assistant',content:'Thinking through your tracker data…',createdAt:new Date().toISOString(),pending:true};
+    chat.messages.push(pending); renderAssistant();
+    try {
+      const context=buildAssistantContext();
+      const history=chat.messages.filter(m=>!m.pending).slice(0,-1).slice(-16).map(m=>({role:m.role,content:m.content}));
+      const result=await core.askAI(promptText,{...context,conversation:history});
+      pending.pending=false; pending.model=result.model||'Gemini';
+      pending.content=result.reply||'I could not generate a response.';
+      pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,5):[];
+      $('assistantMode').textContent='Gemini connected';
+    } catch(err) {
+      pending.pending=false; pending.model='Local fallback';
+      pending.content=assistantAnswer(promptText)+'\n\n_Gemini unavailable: '+(err.message||'request failed')+'. This fallback is generated locally from your tracker data._';
+      pending.actions=[];
+      $('assistantMode').textContent='Local fallback';
+    } finally {
+      chat.updatedAt=new Date().toISOString();
+      chat.messages=chat.messages.slice(-60);
+      core.save(); renderAssistant(); $('assistantAsk').disabled=false;
+    }
+  }
+  $('assistantAsk').onclick=sendAssistantMessage;
+  $('assistantPrompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAssistantMessage();}});
+  $('assistantNewChat').onclick=createAssistantChat;
+  $('assistantRenameChat').onclick=()=>renameAssistantChat(state().assistantActiveChatId);
+  document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('assistantPrompt').value=b.dataset.prompt;sendAssistantMessage();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('assistant')?.classList.contains('active'))renderAssistant();});
   window.addEventListener('pageshow',()=>{if($('assistant')?.classList.contains('active'))renderAssistant();});
-
 
   // Universal quick capture inbox
   const quickLaunch=document.createElement('button');quickLaunch.id='quickCaptureLaunch';quickLaunch.className='v36-quick-launch';quickLaunch.textContent='+ Quick capture';quickLaunch.type='button';document.body.appendChild(quickLaunch);

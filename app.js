@@ -518,6 +518,27 @@ window.MBBS_V36_CORE={
  iso,
  reconnect:async()=>{if(!supabaseClient||!navigator.onLine)return;try{const {data}=await supabaseClient.auth.getSession();if(data?.session){if(!cloudSession||cloudSession.user.id!==data.session.user.id)await startCloudSession(data.session);else queueCloudSync();}}catch(e){console.warn("V36 reconnect deferred",e);}},
  getUser:()=>cloudSession?.user||null,
+ setTopicCompletion:(topicKey,completed=true)=>{
+   const topic=find(topicKey); if(!topic)return false;
+   const was=!!state.done[topicKey], next=!!completed;
+   if(was===next)return true;
+   if(next){
+     ensureToday();
+     state.done[topicKey]=true;
+     state.completionDates[topicKey]=today();
+     state.completedGoal=Number(state.completedGoal||0)+1;
+     if(Number(state.backlog||0)>0)state.backlog--;
+     else if(Number(state.todayTarget||0)>0)state.todayTarget--;
+     state.activity??={};state.activity[today()]=Number(state.activity[today()]||0)+1;
+   }else{
+     delete state.done[topicKey];
+     delete state.completionDates[topicKey];
+     state.backlog=Number(state.backlog||0)+1;
+   }
+   state.selectionQuota=0;state.selectedTopics=[];
+   save();renderAll();return true;
+ },
+ refresh:()=>renderAll(),
  askAI:async(message,context)=>{if(!supabaseClient||!cloudSession)throw new Error("Sign in with an internet connection to use live AI.");const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body:{message,context}});if(error)throw error;return data||{};}
 };
 renderAll();
