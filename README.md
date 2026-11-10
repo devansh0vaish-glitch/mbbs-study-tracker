@@ -69,3 +69,19 @@ To add another provider, register an adapter in `ai-provider.js` or a separately
 - JavaScript syntax checks and ZIP integrity checks pass.
 - The changes have not been deployed to GitHub Pages or Supabase from this environment.
 - JavaScript syntax and ZIP integrity are checked, but a live Gemini request, private endpoint, offline model, browser/iPad layout and real cloud sync have not been end-to-end tested. Test with a backup account or exported data first.
+
+
+## On-device AI (zero AI hosting cost)
+
+The Study Assistant now uses WebLLM in the browser with WebGPU. A user chooses and downloads a supported model from the assistant sidebar; the model weights are cached by the browser on that device and inference runs locally. No AI provider API key or GPU server is required. The first model download requires internet; subsequent inference can work offline after the app shell, runtime and model assets are cached.
+
+### Device compatibility and limitations
+
+- Requires a secure HTTPS origin and a browser/device exposing WebGPU (recent Chrome/Edge and recent Safari releases; actual support varies by OS version and hardware).
+- The app discovers the small Qwen2 model variants available in the pinned WebLLM build and offers those that are present. Small models are a compromise: they are not equivalent to a large cloud model for complex MBBS reasoning.
+- Model downloads can be large and need free storage. Browser storage may be cleared or evicted by the operating system; the model may then need to be downloaded again.
+- If WebGPU is unavailable, the local model cannot run in that browser. No automatic cloud fallback is used.
+- Inference prompts and tracker context are processed in the browser. Existing tracker account sync may still sync saved chat history to Supabase.
+- AI-proposed tracker changes continue to pass the existing action validation and explicit Review & apply confirmation flow.
+
+The legacy `study-assistant` Edge Function is retained as a migration stub and returns HTTP 410; it no longer calls Gemini or another hosted model. Remove any unused `GEMINI_API_KEY` secret from Supabase Function secrets manually if it remains configured.

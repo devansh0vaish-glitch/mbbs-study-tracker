@@ -50,12 +50,13 @@
       <div class="v36-card"><h3>Record a test</h3><div class="v36-formgrid"><label>Test name<input id="testName" placeholder="e.g. Marrow GT 01"></label><label>Date<input id="testDate" type="date"></label><label>Subject<select id="testSubject"></select></label><label>Marks obtained<input id="testScore" type="number" min="0" step="any"></label><label>Total marks<input id="testTotal" type="number" min="1" step="any"></label></div><label>Mistake category<select id="testMistakeType"><option value="knowledge">Knowledge gap</option><option value="conceptual">Conceptual error</option><option value="memory">Memory error</option><option value="misinterpretation">Misinterpretation</option><option value="careless">Careless / silly mistake</option></select></label><label>Test notes / mistakes<textarea id="testMistakes" rows="3" placeholder="What went wrong? Which concepts need work?"></textarea></label><label>Link a syllabus topic<select id="testTopic"><option value="">No linked topic</option></select></label><button class="v36-btn primary" id="saveTest">Save assessment</button></div>
       <div class="v36-grid"><div class="v36-card"><h3>Performance summary</h3><div id="testSummary"></div></div><div class="v36-card"><h3>Score trend</h3><div id="testTrend"></div></div></div>
       <div class="v36-card"><h3>Assessment history</h3><div id="testHistory"></div></div>`,
-    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">A separate, persistent conversation space for your study workflow.</p></div><span class="v36-pill" id="assistantMode">Gemini ready</span></div>
+    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">A separate, persistent conversation space for your study workflow.</p></div><span class="v36-pill" id="assistantMode">Local AI · model not loaded</span></div>
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
+          <div class="v36-local-ai-box"><b>On-device AI</b><p class="muted">Download a model once. It runs on this device; no AI server or subscription is used.</p><label for="localAiModel">Model</label><select id="localAiModel"><option value="">Checking device…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div id="localAiProgress" class="muted" role="status">Model not loaded</div></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
-          <p class="v36-chat-privacy">Chats are saved with your tracker account. Only the active conversation is sent as chat history to Gemini.</p>
+          <p class="v36-chat-privacy">AI inference runs locally on this device. Your tracker may still sync saved chat history through your Supabase account.</p>
         </aside>
         <section class="v36-chat-main">
           <div class="v36-chat-toolbar"><strong id="assistantChatTitle">New conversation</strong><button type="button" class="v36-mini" id="assistantRenameChat">Rename</button></div>
@@ -318,7 +319,7 @@
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
     $('assistantChatTitle').textContent=chat.title || 'New conversation';
-    $('assistantMode').textContent=navigator.onLine?'Gemini · connected when signed in':'Offline · local fallback';
+    $('assistantMode').textContent=window.MBBS_LOCAL_LLM?.status?.engine?'Local AI ready':'Local AI · model not loaded';
     list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
     messages.innerHTML=(chat.messages||[]).map((m,i)=>{
       const role=m.role==='user'?'user':'assistant';
@@ -399,6 +400,33 @@
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
   }
+  // On-device model manager. The model is downloaded only after an explicit user action.
+  const localModelSelect=$('localAiModel'), localProgress=$('localAiProgress');
+  function localProgressText(text){if(localProgress)localProgress.textContent=text;}
+  async function populateLocalModels(){
+    if(!localModelSelect||!window.MBBS_LOCAL_LLM)return;
+    try{
+      const items=await window.MBBS_LOCAL_LLM.models();
+      localModelSelect.innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.id.replace(/-Instruct.*$/,'').replace(/-MLC$/,''))} · ${esc(x.size)}</option>`).join('')||'<option value="">No compatible model found</option>';
+      const saved=localStorage.getItem('MBBS_LOCAL_LLM_MODEL');if(saved&&items.some(x=>x.id===saved))localModelSelect.value=saved;
+      localProgressText(items.length?'Choose a model, then download it over Wi-Fi.':'No compatible model found in the runtime.');
+    }catch(e){localProgressText('Could not load model catalogue: '+(e.message||e));}
+  }
+  $('localAiCheck')?.addEventListener('click',async()=>{
+    try{const c=await window.MBBS_LOCAL_LLM.check();localProgressText(c.supported?'WebGPU is available. Select a model and download it.':'WebGPU is unavailable or this page is not securely loaded. Try a newer Safari, Chrome or Edge.');}
+    catch(e){localProgressText(e.message||'Compatibility check failed.');}
+  });
+  $('localAiDownload')?.addEventListener('click',async()=>{
+    const id=localModelSelect?.value;if(!id){localProgressText('No compatible model is available for this device.');return;}
+    const b=$('localAiDownload');b.disabled=true;
+    try{await window.MBBS_LOCAL_LLM.load(id,p=>localProgressText(p?.text||'Downloading model…'));localProgressText('Model loaded and ready. It will be cached for future use on this device.');$('assistantMode').textContent='Local AI ready';}
+    catch(e){localProgressText('Unable to load model: '+(e.message||e));}
+    finally{b.disabled=false;}
+  });
+  $('localAiUnload')?.addEventListener('click',async()=>{try{await window.MBBS_LOCAL_LLM.unload();localProgressText(window.MBBS_LOCAL_LLM.status.progress);}catch(e){localProgressText(e.message||'Could not unload model.');}});
+  window.addEventListener('mbbs-local-ai-status',e=>{if(e.detail?.progress)localProgressText(e.detail.progress);});
+  populateLocalModels();
+
   async function sendAssistantMessage() {
     const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
     const chat=ensureAssistantChat(), now=new Date().toISOString();
@@ -413,9 +441,9 @@
       const result=await core.askAI(promptText,{conversation,tracker:trackerContext});
       pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
       pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
-      $('assistantMode').textContent=result.provider||result.model||'AI connected';
+      $('assistantMode').textContent=result.provider||result.model||'Local AI';
     } catch(err) {
-      pending.pending=false;pending.model='Local fallback';pending.content=assistantAnswer(promptText)+'\n\n_AI provider unavailable: '+(err.message||'request failed')+'. This response is based on locally available tracker data; no AI action was applied._';pending.actions=[];$('assistantMode').textContent='Local fallback';
+      pending.pending=false;pending.model='Local fallback';pending.content=assistantAnswer(promptText)+'\n\n_AI provider unavailable: '+(err.message||'request failed')+'. This response is based on locally available tracker data; no AI action was applied._';pending.actions=[];$('assistantMode').textContent='Local AI unavailable';
     } finally {
       chat.updatedAt=new Date().toISOString();core.save();renderAssistant();$('assistantAsk').disabled=false;
     }

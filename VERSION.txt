@@ -1,3 +1,2 @@
-MBBS Study Tracker V36
-Package build: 2026-11-10
-Revision: AI context, tracker actions, provider adapters, stable navigation and page persistence
+MBBS Study Tracker V36 — On-device AI update
+Local WebLLM/WebGPU runtime; provider set to local; Gemini backend retired.

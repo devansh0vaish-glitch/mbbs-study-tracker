@@ -60,3 +60,4 @@ header{position:sticky;top:0;z-index:100;isolation:isolate;padding-top:env(safe-
 .v36-overview-summary>.today{margin:0 0 10px}
 .v36-overview-summary>.stats{margin:0 0 8px}
 .v36-overview-summary>.cloudbar{max-width:none;padding:6px 0 2px}
+.v36-local-ai-box{display:grid;gap:7px;padding:11px;margin:10px 0;border:1px solid var(--v36-line);border-radius:12px;background:var(--v36-card)}.v36-local-ai-box>b{font-size:13px}.v36-local-ai-box p{font-size:11px;margin:0}.v36-local-ai-box label{font-size:11px;font-weight:650}.v36-local-ai-box select{width:100%;min-width:0;padding:8px;border:1px solid var(--v36-line);border-radius:8px;background:var(--v36-bg);color:var(--v36-text);font-size:11px}.v36-local-ai-box .v36-btn{width:100%;font-size:11px;padding:8px}.v36-local-ai-box #localAiProgress{font-size:10px;line-height:1.4;overflow-wrap:anywhere}

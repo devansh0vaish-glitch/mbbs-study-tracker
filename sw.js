@@ -1,6 +1,6 @@
-const CACHE_NAME = 'mbbs-v36-shell-5';
+const CACHE_NAME = 'mbbs-v36-shell-6';
 const CORE_ASSETS = [
-  './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js', 'ai-provider.js',
+  './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js', 'local-llm.js', 'ai-provider.js',
   'syllabus.js', 'manifest.json',
   'assets/icon-192.png', 'assets/icon-512.png',
   'assets/apple-touch-icon.png', 'assets/favicon-32.png', 'assets/favicon-16.png'
@@ -23,7 +23,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin && url.hostname !== 'cdn.jsdelivr.net') return;
+  if (url.origin !== self.location.origin && url.hostname !== 'cdn.jsdelivr.net' && url.hostname !== 'esm.run') return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     try {
