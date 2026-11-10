@@ -8,7 +8,7 @@
   const KEY = 'MBBS_LOCAL_LLM_MODEL';
   const INPUT_BUDGET = 2700; // conservative budget inside the model's 4K window
   const OUTPUT_BUDGET = 900;
-  const state = { module: null, engine: null, modelId: '', loading: false, progress: '', supported: null, modelInfo: null };
+  const state = { module: null, engine: null, modelId: '', loading: false, activeRequests: 0, progress: '', supported: null, modelInfo: null };
   const listeners = new Set();
   const SYSTEM = `You are the AI study assistant embedded in an MBBS study tracker. Answer academic and study-workflow questions clearly and accurately. Use only supplied tracker facts; never invent topic keys, dates, subject names, completion states or task IDs. You may propose tracker changes using the action schema below. The app validates every action and requires explicit user confirmation before writing. Never claim a change is already applied. Return ONLY a valid JSON object: {"reply":"Markdown response","actions":[]}. Allowed actions: {"type":"complete_topics","topicKeys":["exact topicKey"]}; {"type":"set_topic_completion","topicKey":"exact topicKey","completed":true|false}; {"type":"set_daily_goal","target":integer 1-100}; {"type":"update_user_goals","weeklyMinutes":number,"weeklyTopics":number}; {"type":"add_planner_tasks","tasks":[{"date":"YYYY-MM-DD","topicKey":"exact topicKey","type":"study|revision","minutes":30}]}; {"type":"remove_planner_tasks","taskIds":["exact id"]}; {"type":"update_planner_settings","availableMinutes":240,"newLimit":5,"prioritySubject":"exact subject"}. Only propose actions when the user clearly requests a data change. For advice, explanations and recommendations, actions must be []. If unclear, ask one concise question and return actions []. Dates must be today or later. Do not exceed 30 topic completions, 14 planner tasks or 30 deletions. Weekly minutes 60-10080 and weekly topics 1-300. A set_daily_goal changes the target, not topic completion. You are an academic study assistant, not a patient-care decision tool; do not provide patient-specific diagnosis or treatment advice.`;
   const MODEL_META = [
@@ -70,12 +70,15 @@
     return messages;
   }
   async function load(modelId,onProgress){
-    if(state.loading)throw new Error('A model operation is already running.');
-    const compatibility=await check();
-    if(!compatibility.secure)throw new Error('Local AI requires HTTPS. Open the tracker from its GitHub Pages address.');
-    if(!compatibility.webgpu)throw new Error('This browser/device does not expose a usable WebGPU adapter. Choose cloud AI or try a supported browser/device.');
-    state.loading=true;state.progress='Preparing local model…';emit();
+    if(state.loading)throw new Error('A model operation is already running. Please wait for it to finish.');
+    if(state.activeRequests>0)throw new Error('The local model is answering a question. Wait for the response before changing or reloading the model.');
+    state.loading=true;
+    let compatibility;
     try{
+      compatibility=await check();
+      if(!compatibility.secure)throw new Error('Local AI requires HTTPS. Open the tracker from its GitHub Pages address.');
+      if(!compatibility.webgpu)throw new Error('This browser/device does not expose a usable WebGPU adapter. Choose cloud AI or try a supported browser/device.');
+      state.progress='Preparing local model…';emit();
       const mod=await getModule();
       const available=await models();
       const selected=modelId||localStorage.getItem(KEY)||available.find(x=>x.recommended)?.id||available[0]?.id;
@@ -102,11 +105,32 @@
     catch{return {reply:cleaned,actions:[],model:state.modelId,provider:'On-device AI · WebLLM'};}
   }
   async function complete({message,context}){
-    if(!state.engine)throw new Error('No local model is loaded. Load a model or choose cloud AI in the provider settings.');
+    if(state.loading)throw new Error('The local model is still loading. Wait until it says Model ready, then retry.');
+    if(!state.engine)throw new Error('No active local model is loaded. Open AI settings and load the model again.');
+    if(state.activeRequests>0)throw new Error('The local model is already processing a request. Wait for it to finish.');
+    const engine=state.engine, modelAtStart=state.modelId;
     const messages=buildMessages({message,context});
-    const result=await state.engine.chat.completions.create({messages,temperature:0.2,max_tokens:OUTPUT_BUDGET});
-    return parseOutput(result.choices?.[0]?.message?.content||'');
+    state.activeRequests++;state.progress='Generating a response…';emit();
+    try{
+      const result=await engine.chat.completions.create({messages,temperature:0.2,max_tokens:OUTPUT_BUDGET});
+      if(engine!==state.engine||modelAtStart!==state.modelId)throw new Error('The local model changed during generation. Reload it and try again.');
+      return parseOutput(result.choices?.[0]?.message?.content||'');
+    }catch(error){
+      const detail=String(error?.message||error);
+      if(/disposed|dispose|worker.*terminated|device.*lost/i.test(detail)){
+        if(state.engine===engine){state.engine=null;state.modelId='';state.modelInfo=null;}
+        state.progress='The WebLLM engine was disposed. Reload the model before asking another question.';emit();
+        throw new Error('The local AI engine was disposed by the browser/runtime. Open AI settings, reload the model, and try again. Your tracker data was not changed.');
+      }
+      throw error;
+    }finally{state.activeRequests=Math.max(0,state.activeRequests-1);emit();}
   }
-  async function unload(){if(state.engine){await state.engine.unload();state.engine=null;state.modelId='';}state.progress='Model unloaded from memory. Cached model weights are retained by the browser.';emit();}
+  async function unload(){
+    if(state.loading)throw new Error('The model is currently loading. Wait until loading finishes before unloading it.');
+    if(state.activeRequests>0)throw new Error('The model is answering a question. Wait for the response before unloading it.');
+    const engine=state.engine;state.engine=null;state.modelId='';state.modelInfo=null;
+    if(engine){try{await engine.unload();}catch(error){state.progress='The model was already released by the browser/runtime.';emit();}}
+    state.progress='Model unloaded from memory. Cached model weights are retained by the browser.';emit();
+  }
   window.MBBS_LOCAL_LLM={check,models,load,complete,unload,subscribe,get status(){return {...state,engine:!!state.engine,module:!!state.module}}};
 })();

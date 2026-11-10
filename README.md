@@ -72,3 +72,7 @@ Ensure `GEMINI_API_KEY` exists under Supabase Dashboard → Edge Functions → S
 ## Verification status
 
 JavaScript syntax checks and ZIP integrity checks are run for this build. The Supabase Edge Function deployment was verified as ACTIVE, version 24, with JWT verification enabled. A live Gemini request, real iPad Safari model download, and cross-device browser testing have not been performed in this environment. Verify these with a signed-in test account and a configured Gemini secret before relying on cloud mode. Local model download reliability varies by device, OS, browser and available memory.
+
+
+## AI engine disposal fix
+This build prevents unloading or switching a local model while inference is active, blocks overlapping local requests, and invalidates a disposed WebLLM engine with a clear reload instruction. The service-worker cache version is bumped so the updated runtime can be fetched.
