@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mbbs-v36-shell-1';
+const CACHE_NAME = 'mbbs-v36-shell-2';
 const CORE_ASSETS = [
   './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js',
   'syllabus.js', 'manifest.json',

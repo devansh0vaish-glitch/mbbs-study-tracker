@@ -11,7 +11,8 @@ A single-package upgrade of the V35 tracker. V36 keeps the existing 19-subject s
 - Study analytics, six-month heatmap, subject progress, weekly trends, plan completion and weekly review.
 - Examination countdowns and a transparent estimated readiness indicator.
 - Mock-test score history, score trends, topic-linked mistakes and add-to-revision actions.
-- Built-in offline study-planning assistant; optional authenticated OpenAI-powered assistant through a Supabase Edge Function.
+- Automatically refreshed local study intelligence using current syllabus progress, revision queue, weak subjects, assessments, focus sessions, weekly goals and upcoming exams.
+- Optional authenticated Google Gemini free-tier assistant for advanced study plans, progress reports, MCQ/flashcard generation and viva practice. No paid-provider fallback.
 - Quick Capture inbox, weekly goals, data export, PWA manifest and service-worker application-shell caching.
 
 ## Files
@@ -36,18 +37,20 @@ Existing Supabase project configuration and email/password authentication are re
 - Offline use is limited to a device/browser that has previously signed in and cached the application. Offline edits are not guaranteed to merge automatically with simultaneous edits from another device. Export a backup before major changes.
 - The PWA shell is cached; push notifications/background reminders and reliable cross-device offline conflict merging are not included in this build.
 
-## Optional live AI assistant (one-time setup)
+## Optional free live AI assistant (one-time setup)
 
-The Study Assistant works in built-in local mode without an API key. To enable live AI, deploy the included function and set your own OpenAI API key as a **Supabase Function secret**. Never place that key in `app.js`, `index.html`, or any public repository file.
+The local study intelligence works without an API key and refreshes automatically whenever the Assistant page opens, the app regains focus, or tracker data is refreshed/imported/synchronised. It is rule-based rather than a trained language model. It analyses the latest local tracker state and remains available offline.
 
-Using the Supabase CLI from the extracted project folder:
+For advanced text generation, the included authenticated Supabase Edge Function uses the Google Gemini Developer API free tier (`gemini-2.5-flash` by default). Google changes model availability and free-tier quotas; check the current official pricing/limits before enabling it. Free-tier prompts may be used by Google to improve its products, so do not send sensitive personal information. The app does not switch to a paid model or provider when the free quota is exhausted.
 
-```bash
-supabase functions deploy study-assistant --project-ref rnjmgtttujzfjonvnaae
-supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY OPENAI_MODEL=gpt-6-luna --project-ref rnjmgtttujzfjonvnaae
-```
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. In Supabase Dashboard, open your project → Edge Functions → Secrets.
+3. Add `GEMINI_API_KEY` with your key. Optionally add `GEMINI_MODEL` with `gemini-2.5-flash`.
+4. Deploy the included `supabase/functions/study-assistant/index.ts` as the function named `study-assistant`.
+5. Sign in to the tracker and test the Assistant page. If the function is not deployed, the key is missing, or the free quota is exhausted, the local assistant continues to work.
 
-The function uses the OpenAI Responses API and the `gpt-6-luna` model by default. API usage is billed to the OpenAI API account associated with the key. You can change `OPENAI_MODEL` to another model available to your API account. After deployment, sign in to the tracker and test the Assistant page. If the function is not deployed or the secret is missing, the built-in local planner remains available.
+The API key must only be stored as a Supabase Function secret. Never place it in `app.js`, `index.html`, `v36.js`, or any public repository file. Supabase injects the secret into the server-side Edge Function at runtime. No OpenAI API key or paid subscription is required for this configuration.
+
 
 ## Important behavior and limitations
 
@@ -55,6 +58,7 @@ The function uses the OpenAI Responses API and the `gpt-6-luna` model by default
 - The smart planner respects available minutes and its topic cap, prioritises an explicitly selected subject, subjects attached to the nearest exam within 30 days, unresolved mistake-linked topics and due revisions. It is a planning suggestion. It does not infer an exact topic-level backlog from the legacy backlog counter because V35 stores backlog as a count rather than a list of named topics.
 - Topic notes, assessments, sessions, exams, plans and preferences sync through the existing JSON user row.
 - AI suggestions never modify tracker data automatically. When live AI is enabled, your prompt and a limited summary of study progress, due revisions and upcoming examination dates are sent to the AI provider through your authenticated Supabase function; do not enter sensitive personal information.
+- Local intelligence is deterministic and does not train itself. Its recommendations update automatically from current tracker data; improvements to the underlying algorithms arrive through software updates.
 - The website has no push-notification scheduler. Use the in-app planner and revision views for due work.
 
 ## Validation performed for this package

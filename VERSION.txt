@@ -1,2 +1,3 @@
 MBBS Study Tracker V36
 Package build: 2026-11-10
+Revision: V36 AI refresh update
