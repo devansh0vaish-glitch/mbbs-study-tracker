@@ -1,4 +1,38 @@
-const C="mbbs-v35";
-self.addEventListener("install",e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(["./","index.html","style.css","app.js","syllabus.js","manifest.json"])))});
-self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>clients.claim())));
-self.addEventListener("fetch",e=>{const u=new URL(e.request.url);if(e.request.method!=="GET"||(u.origin!==location.origin&&u.hostname!=="cdn.jsdelivr.net"))return;e.respondWith(fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r}).catch(()=>caches.match(e.request)))});
+const CACHE_NAME = 'mbbs-v36-shell-1';
+const CORE_ASSETS = [
+  './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js',
+  'syllabus.js', 'manifest.json',
+  'assets/icon-192.png', 'assets/icon-512.png',
+  'assets/apple-touch-icon.png', 'assets/favicon-32.png', 'assets/favicon-16.png'
+];
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(CORE_ASSETS);
+    await self.skipWaiting();
+  })());
+});
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin && url.hostname !== 'cdn.jsdelivr.net') return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const response = await fetch(request);
+      if (response && response.ok) cache.put(request, response.clone()).catch(() => {});
+      return response;
+    } catch {
+      const cached = await cache.match(request) || await cache.match('./index.html');
+      return cached || new Response('Offline: this resource is not available in the saved app shell.', {status: 503, headers: {'Content-Type':'text/plain'}});
+    }
+  })());
+});

@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="color-scheme" content="light dark">
-<title>MBBS Study Tracker</title>
+<meta name="description" content="Personal MBBS study planner, syllabus tracker, revision manager and academic analytics.">
+<title>MBBS Study Tracker V36</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="v36.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 
@@ -20,7 +22,7 @@
 <body>
 <div id="authOverlay" class="auth-overlay">
 <div class="auth-card"><h2>MBBS Study Tracker</h2><p id="authStatus">Sign in to enable cloud sync.</p><div id="authForm"><div id="authDisplayNameRow" class="auth-display-name-row" hidden><input id="authUsername" type="text" maxlength="50" placeholder="Display name"></div><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Password"><div class="row"><button id="signInBtn" class="primary">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div></div><p id="authMsg" class="muted"></p></div></div>
-<header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>19 subjects • syllabus + goals + revision</p></div></div></header>
+<header><div class="header-inner"><div class="logo">MB</div><div><h1>MBBS Study Tracker</h1><p>V36 • plan · focus · revise · improve</p></div></div></header>
 <main>
 <section class="today card" id="todayCard"><div class="ring" id="goalRing"><b id="ringTxt">0/0</b></div><div class="today-txt"><h2>Today</h2><p class="muted" id="todaySub"></p><button class="primary" id="goRevision">Start revision</button></div></section>
 <section class="stats">
@@ -96,6 +98,6 @@
 <div class="card"><h3>Backup</h3><div class="row"><button id="exportData" class="secondary">Export data</button><label class="filebtn">Import data<input id="importData" type="file" accept=".json"></label></div></div>
 </section>
 </main>
-<script src="syllabus.js"></script><script src="app.js"></script>
+<script src="syllabus.js"></script><script src="app.js"></script><script src="v36.js"></script>
 <script>if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"))</script>
 </body></html>

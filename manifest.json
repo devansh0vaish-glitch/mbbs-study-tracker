@@ -1,20 +1,16 @@
 {
-  "name": "MBBS Study Tracker",
+  "name": "MBBS Study Tracker V36",
   "short_name": "MBBS Tracker",
-  "start_url": ".",
+  "description": "Personal MBBS syllabus tracker, intelligent study planner, revision manager and academic dashboard.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#3157e8",
+  "orientation": "any",
+  "background_color": "#f5f6fb",
+  "theme_color": "#17182b",
+  "categories": ["education", "productivity"],
   "icons": [
-    {
-      "src": "assets/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "assets/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    {"src":"assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"}
   ]
 }
