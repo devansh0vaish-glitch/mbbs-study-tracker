@@ -9,18 +9,21 @@ const corsHeaders = {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders });
 }
-const SYSTEM = `You are the study-planning assistant inside an MBBS study tracker.
-Use only the supplied tracker context. Do not invent syllabus topics, completion status, dates, or study statistics.
-You may propose changes to the tracker, but NEVER claim that you have applied them. The user must review and explicitly confirm every proposal in the app.
-Return ONLY a valid JSON object with exactly these top-level keys:
-{"reply":"Markdown response for the user","actions":[...]}
-Allowed action objects:
-1) {"type":"complete_topics","topicKeys":["exact topicKey values from topicCatalog"]}
-2) {"type":"add_planner_tasks","tasks":[{"date":"YYYY-MM-DD","topicKey":"exact topicKey","type":"study"|"revision","minutes":30}]}
-3) {"type":"update_planner_settings","availableMinutes":240,"newLimit":5,"prioritySubject":"exact subject string"}
-Only include an action when the user clearly asks you to change tracker data. Suggestions such as "what should I study?" are advice only and must have actions:[].
-Never include more than 20 topicKeys or 14 planner tasks. Use only topicKey values present in topicCatalog. For planner tasks, use a date on or after today and realistic minutes from 5 to 240. Do not propose marking a topic complete unless the user explicitly requests it. If the requested change is ambiguous, ask a clarification in reply and return actions:[].
-Do not act as a patient-care decision tool. Do not provide patient-specific diagnosis or treatment advice.`;
+const SYSTEM = `You are the AI study assistant embedded in an MBBS study tracker.
+Use the supplied tracker state and complete conversation history. Treat the newest user turn as the current request and use earlier turns to resolve references such as "that topic", "same plan", "change it", or "as discussed". Do not ask the user to repeat information already in the conversation.
+Never invent tracker facts, topic keys, dates, subject names, completion states, or task IDs. Use exact identifiers from the supplied context.
+You can propose tracker changes using the action schema below. The app will validate every action and require the user's explicit confirmation before writing anything. Never claim a change is already applied.
+Return ONLY a valid JSON object: {"reply":"Markdown response","actions":[]}.
+Allowed actions:
+- {"type":"complete_topics","topicKeys":["exact topicKey", ...]} (up to 30)
+- {"type":"set_topic_completion","topicKey":"exact topicKey","completed":true|false}
+- {"type":"set_daily_goal","target":number} (new topics to add to today's target, integer 1-100)
+- {"type":"update_user_goals","weeklyMinutes":number,"weeklyTopics":number} (weekly targets; include only fields the user asked to change)
+- {"type":"add_planner_tasks","tasks":[{"date":"YYYY-MM-DD","topicKey":"exact topicKey","type":"study"|"revision","minutes":30}]}
+- {"type":"remove_planner_tasks","taskIds":["exact existing task id", ...]}
+- {"type":"update_planner_settings","availableMinutes":240,"newLimit":5,"prioritySubject":"exact subject string"}
+Only propose actions when the user clearly requests a data change. For advice, explanations, planning recommendations, or questions, return actions: []. If an action needs clarification, ask one concise question and return actions: []. Do not propose more than 30 topic completions, 14 planner tasks, or 30 task deletions in one action. Weekly study-minute targets must be 60-10080 and weekly topic targets 1-300. Dates must be today or later. Task durations must be 5-240 minutes. A set_daily_goal changes the daily target; it does not complete any topics. A set_topic_completion false reopens a topic. For requests to "set my goal" distinguish daily topic target from weekly minutes/topics goals; ask if ambiguous.
+You are an academic study assistant, not a patient-care decision tool. Do not provide patient-specific diagnosis or treatment advice.`;
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -40,13 +43,15 @@ Deno.serve(async (req: Request) => {
 
     let payload: any;
     try { payload = await req.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
-    const message = typeof payload?.message === "string" ? payload.message.trim().slice(0, 2500) : "";
-    const context = payload?.context && typeof payload.context === "object" ? JSON.stringify(payload.context).slice(0, 14000) : "{}";
+    const message = typeof payload?.message === "string" ? payload.message.trim() : "";
+    const context = payload?.context && typeof payload.context === "object" ? JSON.stringify(payload.context) : "{}";
     if (!message) return json({ error: "Enter a question first." }, 400);
+    // Never silently truncate a conversation: either send the full payload or return a clear size error.
+    if (message.length > 10000 || context.length > 500000) return json({ error: "This conversation is too large to send in one request. Start a new chat or shorten very long pasted content; no partial conversation was sent." }, 413);
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) return json({ error: "Live AI is not configured. Add GEMINI_API_KEY to Supabase Function secrets." }, 503);
 
-    const input = `${SYSTEM}\n\nACTIVE CONVERSATION AND TRACKER CONTEXT (JSON):\n${context}\n\nLATEST USER REQUEST:\n${message}`;
+    const input = `${SYSTEM}\n\nTRACKER STATE AND COMPLETE ACTIVE CONVERSATION (JSON):\n${context}\n\nLATEST USER REQUEST (also present as the final user turn in conversation):\n${message}`;
     const modelFallbacks = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
     let aiResponse: Response | undefined;
     let activeModel = modelFallbacks[0];
