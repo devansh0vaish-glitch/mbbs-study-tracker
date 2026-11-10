@@ -44,14 +44,18 @@ Deno.serve(async (req: Request) => {
     let payload: any;
     try { payload = await req.json(); } catch { return json({ error: "Request body must be valid JSON." }, 400); }
     const message = typeof payload?.message === "string" ? payload.message.trim() : "";
-    const context = payload?.context && typeof payload.context === "object" ? JSON.stringify(payload.context) : "{}";
+    const contextObject = payload?.context && typeof payload.context === "object" ? payload.context : {};
+    // Server-side safety cap mirrors the client context budget. Never forward an unbounded tracker dump.
+    if (Array.isArray(contextObject.conversation)) contextObject.conversation = contextObject.conversation.slice(-8).map((m: any) => ({ role: m?.role, content: String(m?.content || "").slice(-1200) }));
+    if (Array.isArray(contextObject.tracker?.topicCatalog)) contextObject.tracker.topicCatalog = contextObject.tracker.topicCatalog.slice(0, 45);
+    if (Array.isArray(contextObject.tracker?.planner?.days)) contextObject.tracker.planner.days = contextObject.tracker.planner.days.slice(-14);
+    const context = JSON.stringify(contextObject);
     if (!message) return json({ error: "Enter a question first." }, 400);
-    // Never silently truncate a conversation: either send the full payload or return a clear size error.
-    if (message.length > 10000 || context.length > 500000) return json({ error: "This conversation is too large to send in one request. Start a new chat or shorten very long pasted content; no partial conversation was sent." }, 413);
+    if (message.length > 8000 || context.length > 60000) return json({ error: "The AI context is still too large. Narrow the question or start a new chat; no partial tracker action was applied." }, 413);
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) return json({ error: "Live AI is not configured. Add GEMINI_API_KEY to Supabase Function secrets." }, 503);
 
-    const input = `${SYSTEM}\n\nTRACKER STATE AND COMPLETE ACTIVE CONVERSATION (JSON):\n${context}\n\nLATEST USER REQUEST (also present as the final user turn in conversation):\n${message}`;
+    const input = `${SYSTEM}\n\nCOMPACT TRACKER CONTEXT AND RECENT CHAT (JSON):\n${context}\n\nLATEST USER REQUEST:\n${message}`;
     const modelFallbacks = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
     let aiResponse: Response | undefined;
     let activeModel = modelFallbacks[0];
@@ -66,7 +70,7 @@ Deno.serve(async (req: Request) => {
           aiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-            body: JSON.stringify({ model: candidate, input, store: false }),
+            body: JSON.stringify({ model: candidate, input, store: false, generation_config: { max_output_tokens: 1400, temperature: 0.2 } }),
             signal: AbortSignal.timeout(14000),
           });
         } catch (e) {
