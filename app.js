@@ -11,9 +11,10 @@ function setCloudStatus(text,kind=""){const e=cloudEl("cloudStatus");if(!e)retur
 function meaningfulLocalData(){return Object.keys(state.done||{}).length||Object.keys(state.completionDates||{}).length||Object.keys(state.revision?.history||{}).length||state.todayTarget||state.backlog||state.custom?.added?.length||state.custom?.removed?.length;}
 async function pushCloud(){if(!supabaseClient||!cloudSession){return} if(cloudBusy){cloudDirty=true;return} cloudBusy=true;cloudDirty=false;setCloudStatus("Cloud: syncing…");try{const {error}=await supabaseClient.from("user_tracker_data").upsert({user_id:cloudSession.user.id,data:state,schema_version:1,updated_at:new Date().toISOString()},{onConflict:"user_id"});if(error)throw error;setCloudStatus("Cloud: synced","ok")}catch(e){console.error(e);setCloudStatus("Cloud: sync failed","error")}finally{cloudBusy=false;if(cloudDirty)queueCloudSync()}}
 function queueCloudSync(){if(!cloudSession)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(pushCloud,700)}
-async function pullCloud(){if(!cloudSession)return false;setCloudStatus("Cloud: loading…");const {data,error}=await supabaseClient.from("user_tracker_data").select("data,updated_at").eq("user_id",cloudSession.user.id).maybeSingle();if(error){setCloudStatus("Cloud: load failed","error");throw error}if(data?.data){localStorage.setItem(STORE,JSON.stringify(data.data));state={...defaults,...data.data,custom:{...defaults.custom,...(data.data.custom||{})},revision:{...defaults.revision,...(data.data.revision||{}),settings:{...defaults.revision.settings,...((data.data.revision||{}).settings||{})}}};return true}return false}
+async function pullCloud(){if(!cloudSession)return false;setCloudStatus("Cloud: loading…");const {data,error}=await supabaseClient.from("user_tracker_data").select("data,updated_at").eq("user_id",cloudSession.user.id).maybeSingle();if(error){setCloudStatus("Cloud: load failed","error");throw error}if(data?.data){if(Number(state._savedAt||0)>Date.parse(data.updated_at||0)+5000&&meaningfulLocalData()&&confirm("This device has newer changes than the cloud.\n\nOK = keep this device's data and upload it.\nCancel = replace it with the cloud data."))return false;localStorage.setItem(STORE,JSON.stringify(data.data));state={...defaults,...data.data,custom:{...defaults.custom,...(data.data.custom||{})},revision:{...defaults.revision,...(data.data.revision||{}),settings:{...defaults.revision.settings,...((data.data.revision||{}).settings||{})}}};return true}return false}
 async function loadGlobalState(){
  if(!cloudSession)return;
+ isAdmin=false;document.getElementById("adminNav").hidden=true;
  try{
   const {data:ms,error}=await supabaseClient.from("master_syllabus").select("syllabus,version").eq("id",1).single();
   if(error)throw error;
@@ -23,9 +24,9 @@ async function loadGlobalState(){
   else if(isAdmin){await supabaseClient.from("master_syllabus").update({syllabus:window.MBBS_SYLLABUS,version:1,updated_by:cloudSession.user.email,updated_at:new Date().toISOString()}).eq("id",1);BASE=window.MBBS_SYLLABUS;refreshSubjects();}
   const {data:gs}=await supabaseClient.from("global_app_state").select("simulated_date,reset_version").eq("id",1).single();
   if(gs){
-    const rv=Number(gs.reset_version||0); const last=Number(localStorage.getItem("MBBS_GLOBAL_RESET_VERSION")||0);
-    if(rv>last && !isAdmin){state.done={};state.completionDates={};state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];localStorage.setItem("MBBS_GLOBAL_RESET_VERSION",String(rv));localStorage.setItem(STORE,JSON.stringify(state));state._skipCloudPullOnce=true;}
-    state._globalResetVersion=rv; state._globalSimulatedDate=gs.simulated_date||null; state.simulatedDate=gs.simulated_date||null;
+    const rv=Number(gs.reset_version||0); const rk="MBBS_GLOBAL_RESET_VERSION_"+cloudSession.user.id,seen=localStorage.getItem(rk),last=Number(seen||0);
+    if(seen!==null && rv>last && !isAdmin){state.done={};state.completionDates={};state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];localStorage.setItem(STORE,JSON.stringify(state));state._skipCloudPullOnce=true;}
+    localStorage.setItem(rk,String(rv));state._globalResetVersion=rv; state._globalSimulatedDate=gs.simulated_date||null; state.simulatedDate=null;
   }
   document.getElementById("adminNav").hidden=!isAdmin;
   renderAll();
@@ -92,7 +93,7 @@ function renderAdminSyllabus(){
  $("adminInsertTopic").onclick=async()=>{
    const requested=Math.max(1,Math.min(all.length+1,parseInt($("adminInsertNo").value||all.length+1,10)))-1;
    const title=$("adminNewTopic").value.trim(); if(!title)return alert("Enter a topic name.");
-   const entry={n:0,title,duration:$("adminNewDuration").value.trim()};
+   const entry={n:0,id:"t"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title,duration:$("adminNewDuration").value.trim()};
    const target=all[requested];
    if(target){ const targetArr=BASE[s][target.h]; targetArr.splice(target.ti,0,entry); } else { BASE[s][h].push(entry); }
    renumberSubject(s); if(await saveMaster())renderAll();
@@ -100,14 +101,14 @@ function renderAdminSyllabus(){
 }
 async function startCloudSession(session){
  cloudSession=session;
- STORE=`MBBS_STUDY_TRACKER_${session.user.id}`;
+ STORE=`MBBS_STUDY_TRACKER_${session.user.id}`;localStorage.setItem("MBBS_LAST_USER",session.user.id);
  const raw=localStorage.getItem(STORE);
  state=structuredClone(defaults);
  if(raw){try{const s=JSON.parse(raw);state={...defaults,...s,custom:{...defaults.custom,...(s.custom||{})},revision:{...defaults.revision,...(s.revision||{}),settings:{...defaults.revision.settings,...((s.revision||{}).settings||{}),difficultyIntervals:{...defaults.revision.settings.difficultyIntervals,...(((s.revision||{}).settings||{}).difficultyIntervals||{})}}}}}catch(e){}}
  document.getElementById("authOverlay")?.classList.add("hidden");
  setCloudStatus(`Cloud: ${session.user.user_metadata?.display_name||session.user.user_metadata?.username||session.user.email||"signed in"}`);
  await loadGlobalState();
- const hasCloud=state._skipCloudPullOnce?false:await pullCloud();
+ let hasCloud=false;try{hasCloud=state._skipCloudPullOnce?false:await pullCloud()}catch(e){renderAll();return}
  state._skipCloudPullOnce=false;
  if(!hasCloud){
    localStorage.setItem(STORE,JSON.stringify(state));
@@ -119,6 +120,7 @@ async function startCloudSession(session){
  }
 }
 async function clearSignedOutView(){
+ isAdmin=false;$("adminNav").hidden=true;
  cloudSession=null; cloudTimer&&clearTimeout(cloudTimer); cloudTimer=null; cloudBusy=false; cloudDirty=false;
  STORE="MBBS_STUDY_TRACKER_V9";
  state=structuredClone(defaults);
@@ -146,7 +148,8 @@ function setAuthMode(mode){
    submit.textContent="Sign in";toggle.textContent="Create account";
  }
 }
-async function initCloud(){if(!supabaseClient){setCloudStatus("Cloud: unavailable","error");return}setAuthMode("signin");const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else await clearSignedOutView();supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else await clearSignedOutView()})}
+async function startOffline(){const lu=localStorage.getItem("MBBS_LAST_USER");if(!lu)return false;STORE="MBBS_STUDY_TRACKER_"+lu;try{const s=JSON.parse(localStorage.getItem(STORE)||"null");if(!s)return false;state={...defaults,...s,custom:{...defaults.custom,...(s.custom||{})},revision:{...defaults.revision,...(s.revision||{}),settings:{...defaults.revision.settings,...((s.revision||{}).settings||{})}}}}catch(e){return false}cloudEl("authOverlay")?.classList.add("hidden");setCloudStatus("Offline: changes are saved on this device");renderAll();return true}
+async function initCloud(){if(!supabaseClient){if(!await startOffline())setCloudStatus("Cloud: unavailable","error");return}setAuthMode("signin");const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startCloudSession(session);else if(!navigator.onLine&&await startOffline()){}else await clearSignedOutView();supabaseClient.auth.onAuthStateChange(async (_event,session)=>{if(session)await startCloudSession(session);else await clearSignedOutView()})}
 async function authAction(mode){
  const email=cloudEl("authEmail").value.trim(),password=cloudEl("authPassword").value;
  const username=cloudEl("authUsername")?.value.trim()||"";
@@ -186,6 +189,7 @@ function subjectLabel(s){ return SUBJECT_DISPLAY_NAMES[s] || s; }
 let SUBJECTS=[];
 let isAdmin=false;
 function refreshSubjects(){
+ for(const s in BASE)for(const h in BASE[s])for(const t of BASE[s][h])if(!t.id)t.id=s+"||"+h+"||"+t.title;
  const existing=Object.keys(BASE);
  const ordered=MASTER_SUBJECT_ORDER.filter(s=>existing.includes(s));
  const extras=existing.filter(s=>!MASTER_SUBJECT_ORDER.includes(s));
@@ -210,7 +214,7 @@ state.done??={};state.completionDates??={};state.custom??={added:[],removed:[]};
 state.revision??=structuredClone(defaults.revision);state.revision.history??={};state.revision.eligibility??={};state.revision.manualQueue??=[];
 state.revision.settings??={newPerDay:5,totalPerDay:15,intervals:[1,3,7,14,30,60,120]};
 state.revision.settings.difficultyIntervals??={forgot:[1,2,4],good:[3,7,14,30,60,120],easy:[7,14,30,60,120,180]};
-function save(){if(STORE) localStorage.setItem(STORE,JSON.stringify(state));queueCloudSync()}
+function save(){state._savedAt=Date.now();if(STORE) localStorage.setItem(STORE,JSON.stringify(state));queueCloudSync()}
 function allTopics(){
  const a=[];
  SUBJECTS.forEach((s,si)=>{
@@ -220,7 +224,7 @@ function allTopics(){
        const av=Number.isFinite(an)?an:Infinity,bv=Number.isFinite(bn)?bn:Infinity;
        return av-bv;
      });
-     topics.forEach((t,ti)=>{const k=key(s,h,t.title);if(!state.custom.removed.includes(k))a.push({s,h,t,k,si,hi,ti});});
+     topics.forEach((t,ti)=>{const k=t.id||key(s,h,t.title);if(!state.custom.removed.includes(k))a.push({s,h,t,k,si,hi,ti});});
    });
  });
  state.custom.added.forEach((x,i)=>{const k=key(x.s,x.h,x.t.title);if(!state.custom.removed.includes(k))a.push({s:x.s,h:x.h,t:x.t,k,si:SUBJECTS.indexOf(x.s),hi:9999+i,ti:i});});
@@ -229,13 +233,14 @@ function allTopics(){
 function find(k){return allTopics().find(x=>x.k===k)}
 function completedCount(){return allTopics().filter(x=>state.done[x.k]).length}
 function realToday(){return iso(new Date())}
-function today(){return state.simulatedDate||realToday()}
+function streak(){const a=state.activity||{};let d=today(),n=0,miss=[];if(!a[d])d=shift(d,-1);for(let i=0;i<400;i++){if(a[d])n++;else{miss=miss.filter(x=>i-x<7);if(miss.length)break;miss.push(i)}d=shift(d,-1)}return n}
+function celebrate(t){if(localStorage.getItem("MBBS_MOTIV_OFF"))return;navigator.vibrate?.(30);const d=document.createElement("div");d.className="toast";d.textContent="✓ "+t;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
+function today(){return realToday()}
 function ensureToday(){
  const t=today();
  if(state.goalDate===t)return;
  if(state.goalDate!==null){
-   const unfinished=Math.max(0,Number(state.todayTarget||0)-Number(state.completedGoal||0));
-   state.backlog=Number(state.backlog||0)+unfinished;
+   state.backlog=remainingProgress();
  }
  state.goalDate=t;
  state.targetSet=false;
@@ -257,7 +262,7 @@ function goalRender(){
 }
 function renderStats(){
  const total=allTopics().length,done=completedCount(),due=revisionItems().filter(x=>x.due<=today()).length;
- $("overall").textContent=Math.round(done/Math.max(1,total)*100)+"%";$("completed").textContent=done;$("goalStat").textContent=`${state.completedGoal||0} / ${state.goalTotal||0}`;$("revisionStat").textContent=due;
+ $("overall").textContent=Math.round(done/Math.max(1,total)*100)+"%";$("completed").textContent=done;$("goalStat").textContent=`${state.completedGoal||0} / ${state.goalTotal||0}`;$("revisionStat").textContent=due;{const gt=Number(state.goalTotal||0),gd=Number(state.completedGoal||0),rg=$("goalRing");if(rg){rg.style.setProperty("--p",(gt?Math.min(100,gd/gt*100):0)+"%");$("ringTxt").textContent=gd+"/"+gt;$("todaySub").textContent=(gt?remainingProgress()+" to go":"Set today's target")+" · "+due+" to revise"+(!localStorage.getItem("MBBS_MOTIV_OFF")&&streak()>1?" · "+streak()+"-day streak":"")}}{const ed=$("examDate");if(ed){ed.value=state.examDate||"";const lf=total-done,dl=state.examDate?Math.ceil((new Date(state.examDate+"T12:00:00")-new Date(today()+"T12:00:00"))/864e5):0;$("examInfo").textContent=!state.examDate?"Pick your exam date to see a daily pace.":dl<=0?"Exam date has passed.":lf+" topics left · "+dl+" days · about "+Math.ceil(lf/dl)+" topics/day"}}
 }
 function completeControls(){
  const r=remainingProgress(),active=!!state.selectionQuota;
@@ -273,12 +278,12 @@ function renderSubjects(){
  list.innerHTML="";
  SUBJECTS.forEach(s=>{
   const items=allTopics().filter(x=>x.s===s);
-  const vis=q?items.filter(x=>(x.s+" "+x.h+" "+x.t.title).toLowerCase().includes(q)):items;
-  if(q&&!vis.length)return;
+  const vis0=q?items.filter(x=>(x.s+" "+x.h+" "+x.t.title).toLowerCase().includes(q)):items;const vis=$("onlyTodo")?.checked?vis0.filter(x=>!state.done[x.k]):vis0;
+  if((q||$("onlyTodo")?.checked)&&!vis.length)return;
   const d=document.createElement("details");
   d.className="subject"; if(q)d.open=true;
   const sm=document.createElement("summary");
-  sm.innerHTML=`<span>${esc(s)}</span><span class="meta">${items.length} topics ▾</span>`;
+  const nx=items.find(x=>!state.done[x.k]);const dn=items.filter(x=>state.done[x.k]).length;sm.innerHTML=`<span class="sname">${esc(subjectLabel(s))}${nx?`<small class="nxt">Next: ${esc(nx.t.title)}</small>`:""}</span><span class="meta"><b>${dn}</b> / ${items.length}</span><i class="sbar"><u style="width:${items.length?dn/items.length*100:0}%"></u></i>`;
   d.appendChild(sm);
   const body=document.createElement("div"); body.className="body";
   const groups={};
@@ -290,7 +295,7 @@ function renderSubjects(){
     arr.forEach(x=>{
       const done=!!state.done[x.k], pick=selected.has(x.k);
       const row=document.createElement("div");
-      row.className="topic"+(done?" completed":"")+(pick?" selected":"");
+      row.className="topic"+(done?" completed":"")+(pick?" selected":"");row.dataset.k=x.k;
       if(active&&!done){
         row.classList.add("selectable");
         row.innerHTML=`<input type="checkbox" ${pick?"checked":""}><span class="serial-number">${esc(x.t.n ?? "")}</span><span class="topic-name">${esc(x.t.title)}</span><span class="duration">${esc(x.t.duration||"")}</span>`;
@@ -322,10 +327,7 @@ function updateSelectionRows(){
  document.querySelectorAll("#subjectList .topic.selectable").forEach(row=>{
    const input=row.querySelector("input");
    if(!input)return;
-   const topic=row.querySelector(".topic-name")?.textContent;
-   const x=allTopics().find(t=>t.t.title===topic && !state.done[t.k]);
-   if(!x)return;
-   const on=selected.has(x.k);
+   const on=selected.has(row.dataset.k);
    input.checked=on;
    row.classList.toggle("selected",on);
  });
@@ -333,7 +335,7 @@ function updateSelectionRows(){
 function commitSelection(){
  const q=Number(state.selectionQuota),chosen=[...state.selectedTopics];if(!q||chosen.length!==q)return;
  chosen.forEach(k=>{if(state.done[k])return;state.done[k]=true;state.completionDates[k]=today();state.completedGoal=(state.completedGoal||0)+1;if(state.backlog>0)state.backlog--;else if(state.todayTarget>0)state.todayTarget--;});
- state.selectionQuota=0;state.selectedTopics=[];save();renderAll();
+ (state.activity??={})[today()]=(state.activity[today()]||0)+q;state.selectionQuota=0;state.selectedTopics=[];save();renderAll();if(state.targetSet&&remainingProgress()===0)celebrate("Today's target complete");
 }
 $("completeBtn").onclick=()=>{$("completeCount").disabled=false;$("completeCount").focus();$("selectionStatus").textContent="Choose how many topics to complete."};
 $("completeCount").onchange=()=>{const n=Number($("completeCount").value||0);if(!n||n>remainingProgress())return;state.selectionQuota=n;state.selectedTopics=[];save();renderSubjects();completeControls()};
@@ -345,9 +347,9 @@ function completionDate(k){return state.completionDates[k]||null}
 function revisionItems(){
  const out=[];const intervals=state.revision.settings.intervals.map(Number).filter(n=>n>0);
  allTopics().forEach(x=>{
-  if(!state.done[x.k]||eligibility(x.k)==="never")return;
+  if(!state.done[x.k]||eligibility(x.k)==="never")return;if(eligibility(x.k)==="manual"&&!(state.revision.history[x.k]?.next)&&!(state.revision.added||{})[x.k])return;
   const h=state.revision.history[x.k]||{cycle:0,next:null,reviews:[]};
-  if(!h.next){out.push({...x,cycle:0,due:completionDate(x.k)||today(),newItem:true,difficulty:"new"});return}
+  if(!h.next){out.push({...x,cycle:0,due:(state.revision.added||{})[x.k]?today():(completionDate(x.k)||today()),newItem:true,difficulty:"new"});return}
   out.push({...x,cycle:h.cycle||0,due:h.next,newItem:false,difficulty:h.difficulty||"good"});
  });
  state.revision.manualQueue.forEach(k=>{const x=find(k);if(x&&!state.done[k]&&!out.some(y=>y.k===k))out.push({...x,cycle:0,due:today(),manual:true})});
@@ -375,15 +377,17 @@ function revisionRender(){
  const all=orderedRevision(revisionItems()),due=all.filter(x=>x.due<=today()),over=all.filter(x=>x.due<today());
  const maxNew=Number(state.revision.settings.newPerDay||5),maxTotal=Number(state.revision.settings.totalPerDay||15);
  const newOnes=due.filter(x=>x.newItem),scheduled=due.filter(x=>!x.newItem);
- const todayItems=orderedRevision([...scheduled,...newOnes].slice(0,maxTotal));
+ const todayItems=orderedRevision([...scheduled,...newOnes.slice(0,maxNew)].slice(0,maxTotal));
  $("revDue").textContent=due.length;$("revToday").textContent=todayItems.length;$("revNew").textContent=Math.min(maxNew,newOnes.length);$("revOverdue").textContent=over.length;
  const groups=revisionGroups(todayItems);$("revisionQueue").innerHTML=groups.length?groups.map(g=>groupHTML(g)).join(""):"<p class='muted'>Nothing due today.</p>";
  $("revisionPreview").innerHTML=revisionGroups(all.slice(0,5)).map(g=>groupHTML(g,true)).join("")||"<p class='muted'>No revision items yet.</p>";
+{const shelf=allTopics().filter(x=>state.done[x.k]&&eligibility(x.k)==="manual"&&!(state.revision.history[x.k]?.next)&&!(state.revision.added||{})[x.k]);$("revShelf").innerHTML=shelf.slice(0,40).map(x=>`<div class="admin-topic"><span>${esc(x.t.title)} <span class="muted">${esc(subjectLabel(x.s))}</span></span><button class="secondary small" data-add="${esc(x.k)}">Add to revision</button></div>`).join("")||"<p class='muted'>Nothing on the shelf.</p>";
+const cnt={};all.forEach(x=>{const dd=x.due<today()?today():x.due;cnt[dd]=(cnt[dd]||0)+1});const days=Array.from({length:14},(_,i)=>shift(today(),i));const mx=Math.max(1,...days.map(d=>cnt[d]||0));$("revCal").innerHTML=days.map(d=>`<div class="calcol" title="${d}"><i style="height:${(cnt[d]||0)/mx*100}%"></i><span>${cnt[d]||0}</span><small>${d.slice(8)}</small></div>`).join("")}
 }
 function groupHTML(g,preview=false){
  const topics=g.items.slice(0,5).map(x=>`<div class="revision-topic-card">
    <div class="revision-topic-head"><span class="revision-topic-name"><b>${esc(x.t.n??"")}.</b> ${esc(x.t.title)}</span><span class="tag">${esc(x.difficulty||"new")}</span></div>
-   <div class="muted revision-topic-meta">${esc(g.s)} · ${esc(g.h)} · Due ${esc(x.due)}</div>
+   <div class="muted revision-topic-meta">${esc(subjectLabel(g.s))} · ${esc(g.h)} · Due ${esc(x.due)}</div>
    ${preview?"":`<div class="actions revision-topic-actions">
       <button class="secondary" data-topic="${esc(x.k)}" data-action="forgot">Forgot</button>
       <button class="secondary" data-topic="${esc(x.k)}" data-action="good">Good</button>
@@ -396,7 +400,7 @@ function groupHTML(g,preview=false){
  </div>`;
 }
 
-document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const k=b.dataset.topic;if(!k)return;const action=b.dataset.action;const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let c=h.cycle||0;if(action==="forgot")c=0;else c=Math.min(c+1,intervals.length-1);h.cycle=c;h.difficulty=action;h.next=shift(today(),intervals[c]||1);state.revision.history[k]=h;save();renderAll()});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;const k=b.dataset.topic;if(!k)return;const action=b.dataset.action;const h=state.revision.history[k]||{cycle:0,reviews:[]};h.reviews??=[];h.reviews.push({date:today(),rating:action});const intervals=(state.revision.settings.difficultyIntervals?.[action]||state.revision.settings.intervals).map(Number).filter(n=>n>0);let i;if(action==="forgot"){i=Math.min(h.fs||0,intervals.length-1);h.fs=(h.fs||0)+1;h.cycle=0}else{i=Math.min(h.cycle||0,intervals.length-1);h.cycle=(h.cycle||0)+1;h.fs=0}h.difficulty=action;h.next=shift(today(),intervals[i]||1);state.revision.history[k]=h;(state.activity??={})[today()]=(state.activity[today()]||0)+1;save();renderAll();if(!revisionItems().some(x=>x.due<=today()))celebrate("Revision cleared")});
 
 function populateAdmin(){
  if(!$("newPerDay"))return;
@@ -416,7 +420,7 @@ function renderBulk(){
 }
 $("bulkApply").onclick=()=>{
  const chosen=orderedSyllabus([...bulkSelected].map(k=>find(k)).filter(Boolean));if(!chosen.length){alert("Select topics first.");return}
- chosen.forEach((x,i)=>{const d=shift(today(),-Math.floor(i/5));state.done[x.k]=true;state.completionDates[x.k]=d});
+ chosen.forEach((x,i)=>{const d=shift(today(),-(Math.ceil(chosen.length/5)-Math.floor(i/5)));state.done[x.k]=true;state.completionDates[x.k]=d});
  bulkSelected.clear();save();renderAll();alert("Historical completion dates added. Today's goal and backlog were not changed.");
 };
 function orderedSyllabus(items){return [...items].sort((a,b)=>a.si-b.si||a.hi-b.hi||a.ti-b.ti)}
@@ -442,10 +446,6 @@ $("saveSettings").onclick=()=>{
 $("exportData").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="mbbs-study-tracker-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $("importData").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!x||typeof x!=="object")throw Error();state={...defaults,...x,custom:{...defaults.custom,...(x.custom||{})},revision:{...defaults.revision,...(x.revision||{}),settings:{...defaults.revision.settings,...((x.revision||{}).settings||{})}}};save();renderAll();alert("Tracker data imported. Built-in syllabus was not replaced.")}catch(err){alert("Invalid backup file.")}e.target.value=""};
 
-$("simulateDay").onclick=async()=>{if(!isAdmin)return;const current=today();const unfinished=Math.max(0,Number(state.todayTarget||0)-Number(state.completedGoal||0));state.backlog=Number(state.backlog||0)+unfinished;const next=shift(current,1);state.simulatedDate=next;state.goalDate=next;state.targetSet=false;state.todayTarget=0;state.goalTotal=Number(state.backlog||0);state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];save();await supabaseClient.from("global_app_state").update({simulated_date:next,updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
-$("exitSimulation").onclick=async()=>{if(!isAdmin)return;state.simulatedDate=null;save();await supabaseClient.from("global_app_state").update({simulated_date:null,updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
-$("resetProgress").onclick=async()=>{if(!isAdmin)return;if(!confirm("Reset study progress, daily goals, backlog and revision history for all users? The master syllabus will remain unchanged."))return;state.done={};state.completionDates={};state.simulatedDate=null;state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];save();await supabaseClient.from("global_app_state").update({simulated_date:null,reset_version:Date.now(),updated_at:new Date().toISOString(),updated_by:cloudSession.user.email}).eq("id",1);renderAll()};
-
 $("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("nav").querySelectorAll("button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active");if(b.dataset.page==="revision")renderRevision();if(b.dataset.page==="history")renderHistory();});
 function renderRevision(){revisionRender()}
 function renderAccountInfo(){
@@ -469,7 +469,7 @@ function renderHistory(){
  if(!filtered.length){list.innerHTML='<p class="muted">No completed topics found.</p>';return;}
  const datesGroups=[];
  filtered.forEach(x=>{let dg=datesGroups.at(-1);if(!dg||dg.date!==x.date){dg={date:x.date,headers:[]};datesGroups.push(dg);}let hg=dg.headers.at(-1);if(!hg||hg.header!==x.h){hg={header:x.h,subjects:[]};dg.headers.push(hg);}let sg=hg.subjects.at(-1);if(!sg||sg.subject!==x.s){sg={subject:x.s,items:[]};hg.subjects.push(sg);}sg.items.push(x);});
- list.innerHTML=datesGroups.map(dg=>`<div class="history-date"><h3>${esc(dg.date)}</h3>${dg.headers.map(hg=>`<div class="history-header"><h4>${esc(hg.header)}</h4>${hg.subjects.map(sg=>`<div class="history-subject"><b>${esc(sg.subject)}</b>${sg.items.map(x=>`<div class="history-topic"><span><b>${esc(x.t.n??"")}.</b> ${esc(x.t.title)}</span><span class="muted">${esc(x.date)}</span></div>`).join("")}</div>`).join("")}</div>`).join("")}</div>`).join("");
+ list.innerHTML=datesGroups.map(dg=>`<div class="history-date"><h3>${esc(dg.date)}</h3>${dg.headers.map(hg=>`<div class="history-header"><h4>${esc(hg.header)}</h4>${hg.subjects.map(sg=>`<div class="history-subject"><b>${esc(subjectLabel(sg.subject))}</b>${sg.items.map(x=>`<div class="history-topic"><span><b>${esc(x.t.n??"")}.</b> ${esc(x.t.title)}</span><span class="muted">${esc(x.date)}</span></div>`).join("")}</div>`).join("")}</div>`).join("")}</div>`).join("");
 }
 $("historySubject")?.addEventListener("change",renderHistory);
 $("historyDate")?.addEventListener("change",renderHistory);
@@ -484,11 +484,18 @@ $("adminRemoveSubject")?.addEventListener("click",async()=>{
  delete BASE[subject];
  refreshSubjects();
  if(await saveMaster())renderAll();
-});$("selectSyllabus")?.addEventListener("change",e=>{localStorage.setItem("MBBS_SELECTED_SYLLABUS",e.target.value);renderAll();});$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
-$("syncNow").onclick=async()=>{await loadGlobalState();const skip=state._skipCloudPullOnce;state._skipCloudPullOnce=false;if(!skip)await pullCloud();else await pushCloud();renderAll();setCloudStatus("Cloud: synced","ok")};
+});$("selectSyllabus")?.addEventListener("change",e=>{localStorage.setItem("MBBS_SELECTED_SYLLABUS",e.target.value);renderAll();});$("adminAddSubject")?.addEventListener("click",async()=>{const n=prompt("New subject name");if(!n)return;if(BASE[n.trim()])return alert("That subject already exists.");BASE[n.trim()]={};if(await saveMaster())renderAll()});$("adminRenameSubject")?.addEventListener("click",async()=>{const old=$("adminSubject").value,n=prompt("New subject name",old);if(!n||n===old)return;if(BASE[n.trim()])return alert("That subject already exists.");BASE[n.trim()]=BASE[old];delete BASE[old];if(await saveMaster())renderAll()});$("adminAddHeader")?.addEventListener("click",async()=>{const s=$("adminSubject").value,n=prompt("New header name");if(!n)return;if(BASE[s][n.trim()])return alert("That header already exists.");BASE[s][n.trim()]=[];if(await saveMaster())renderAll()});
+$("syncNow").onclick=async()=>{await loadGlobalState();const skip=state._skipCloudPullOnce;state._skipCloudPullOnce=false;if(skip||!await pullCloud())await pushCloud();renderAll();setCloudStatus("Cloud: synced","ok")};
 cloudEl("signInBtn").onclick=()=>authAction(authMode);
 cloudEl("signUpBtn").onclick=()=>{if(authMode==="signin")setAuthMode("signup");else setAuthMode("signin");};
-cloudEl("signOutBtn").onclick=async()=>{await supabaseClient?.auth.signOut({scope:"local"})};
+cloudEl("signOutBtn").onclick=async()=>{localStorage.removeItem("MBBS_LAST_USER");await supabaseClient?.auth.signOut({scope:"local"})};
+$("goRevision")?.addEventListener("click",()=>$("nav").querySelector('[data-page="revision"]').click());
+$("onlyTodo")?.addEventListener("change",renderSubjects);
+$("examDate").onchange=e=>{state.examDate=e.target.value;save();renderAll()};
+$("motivToggle").checked=!localStorage.getItem("MBBS_MOTIV_OFF");$("motivToggle").onchange=e=>e.target.checked?localStorage.removeItem("MBBS_MOTIV_OFF"):localStorage.setItem("MBBS_MOTIV_OFF","1");
+$("resetMine").onclick=()=>{if(prompt("This erases ALL your progress, goals and revision data. Type RESET to confirm.")!=="RESET")return;state.done={};state.completionDates={};state.goalDate=realToday();state.targetSet=false;state.todayTarget=0;state.backlog=0;state.goalTotal=0;state.completedGoal=0;state.selectionQuota=0;state.selectedTopics=[];state.revision.history={};state.revision.manualQueue=[];state.revision.added={};state.activity={};save();renderAll()};
+document.addEventListener("click",e=>{const b=e.target.closest("[data-add]");if(!b)return;(state.revision.added??={})[b.dataset.add]=true;save();renderAll()});
+addEventListener("online",()=>{if(cloudSession)queueCloudSync()});
 renderAll();
 initCloud();
 })();
