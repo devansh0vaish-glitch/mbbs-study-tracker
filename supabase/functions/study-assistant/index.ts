@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const MODEL = "@cf/zai-org/glm-4.7-flash";
 const ORIGIN = "https://devansh0vaish-glitch.github.io";
 const SYSTEM = `You are an evidence-conscious MBBS undergraduate tutor and study-tracker copilot for a medical student in India. Give accurate, exam-oriented explanations. Use clear headings, concise comparison tables and stepwise mechanisms when useful. Prioritize Robbins and Cotran for pathology, KD Tripathi 8th edition for pharmacology, Apurba Sastry for microbiology and Park for community medicine. Never invent textbook quotations, references, clinical facts, tracker facts, topic keys, dates or task IDs. Use Mermaid flowcharts when useful; use charts only with supplied numerical data. Do not provide patient-specific diagnosis or treatment advice. Propose tracker actions only when explicitly requested, using exact supplied IDs and dates. Allowed actions: complete_topics(topicKeys), set_topic_completion(topicKey,completed), set_daily_goal(target), update_user_goals(weeklyMinutes,weeklyTopics), add_planner_tasks(tasks), remove_planner_tasks(taskIds), update_planner_settings(availableMinutes,newLimit,prioritySubject). The app validates and asks confirmation before writing. Never claim an action was applied. Return only JSON with keys reply (string) and actions (array).`;
 const ALLOWED = new Set(["complete_topics","set_topic_completion","set_daily_goal","update_user_goals","add_planner_tasks","remove_planner_tasks","update_planner_settings"]);
@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
       cf = await fetch(endpoint, {
         method:"POST",
         headers:{Authorization:"Bearer " + token,"Content-Type":"application/json"},
-        body:JSON.stringify({messages:[{role:"system",content:SYSTEM},{role:"user",content:"TRACKER CONTEXT (JSON):\n"+context+"\n\nUSER REQUEST:\n"+message}],max_tokens:700,temperature:0.2}),
+        body:JSON.stringify({messages:[{role:"system",content:SYSTEM},{role:"user",content:"TRACKER CONTEXT (JSON):\n"+context+"\n\nUSER REQUEST:\n"+message}],max_tokens:1400,temperature:0.1,chat_template_kwargs:{enable_thinking:false}}),
         signal:AbortSignal.timeout(14000)
       });
     } catch (e) {
@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
       console.error("Cloudflare inference rejected", cf.status, details);
       return respond(req,{error:cf.status===429 ? "Cloud AI rate limit reached. Please wait briefly and retry." : "Cloud AI request failed" + (details ? ": " + details : " (HTTP " + cf.status + ").")},200);
     }
-    const rawText = typeof result?.result?.response === "string" ? result.result.response.trim() : "";
+    const rawText = (typeof result?.result?.response === "string" ? result.result.response : typeof result?.result?.choices?.[0]?.message?.content === "string" ? result.result.choices[0].message.content : typeof result?.choices?.[0]?.message?.content === "string" ? result.choices[0].message.content : typeof result?.response === "string" ? result.response : "").trim();
     if (!rawText) {
       console.error("Cloudflare response contained no text", JSON.stringify(result?.result || {}).slice(0,300));
       return respond(req,{error:"The cloud AI returned an empty response. Please retry."},200);
