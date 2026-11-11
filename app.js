@@ -546,7 +546,8 @@ window.MBBS_V36_CORE={
    save();renderAll();return true;
  },
  refresh:()=>renderAll(),
- askAI:async(message,context)=>{if(!window.MBBS_AI_PROVIDERS)throw new Error("AI provider adapter is missing.");return window.MBBS_AI_PROVIDERS.complete({message,context,invoke:async(body)=>{if(!supabaseClient||!cloudSession)throw new Error("Sign in with an internet connection to use cloud AI.");const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body});if(error)throw new Error(error.message||"Cloud AI request failed.");if(data?.error)throw new Error(data.error);return data||{};},getAccessToken:()=>window.MBBS_V36_CORE?.getAccessToken?.()});}
+ askAI:async(message,context)=>{if(!window.MBBS_AI_PROVIDERS)throw new Error("AI provider adapter is missing.");return window.MBBS_AI_PROVIDERS.complete({message,context,invoke:async(body)=>{if(!supabaseClient||!cloudSession)throw new Error("Sign in with an internet connection to use cloud AI.");const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body});if(error)throw new Error(error.message||"Cloud AI request failed.");if(data?.error)throw new Error(data.error);return data||{};},getAccessToken:()=>window.MBBS_V36_CORE?.getAccessToken?.()});},
+listAIModels:async()=>{if(!supabaseClient||!cloudSession)throw new Error("Sign in to load models available to your Cloudflare account.");const {data,error}=await supabaseClient.functions.invoke("study-assistant",{body:{action:"list_models"}});if(error)throw new Error(error.message||"Could not load model catalogue.");if(data?.error)throw new Error(data.error);return data||{models:[]};}
 };
 renderAll();
 initCloud();

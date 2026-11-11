@@ -54,16 +54,16 @@
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
-          <div class="v36-local-ai-box"><b>AI provider</b><p class="muted">Cloudflare Workers AI runs online through your secured Supabase function. Your question and relevant study-tracker context are sent to Cloudflare; no model download or WebGPU is required. Local AI remains optional.</p><label for="aiProviderMode">How should AI run?</label><select id="aiProviderMode"><option value="local">Local only · on this device</option><option value="hybrid">Local first · cloud fallback</option><option value="cloud">Cloudflare AI · online (recommended)</option></select><label class="v36-ai-consent"><input type="checkbox" id="aiCloudConsent"> I explicitly allow cloud AI to receive my prompts and compact tracker context.</label><p class="muted v36-ai-privacy-note">Cloud requests require sign-in. Cloudflare Workers AI free tier includes 10,000 Neurons per day; requests stop when the free quota or rate limit is reached. No paid fallback is enabled. API credentials stay in Supabase secrets, never in this app.</p><hr><b>On-device model</b><label for="localAiModel">Compatible model</label><select id="localAiModel"><option value="">Checking WebGPU and model catalogue…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div class="v36-ai-progress-wrap"><progress id="localAiProgressBar" max="100" value="0" aria-label="Model download progress"></progress><div class="v36-ai-progress-meta"><span id="localAiProgress" class="muted" role="status" aria-live="polite">Model not loaded</span><b id="localAiProgressPercent">0%</b></div></div></div>
+          <div class="v36-local-ai-box"><b>AI provider</b><p class="muted">Cloudflare Workers AI runs online through your secured Supabase function. Your question and relevant study-tracker context are sent to Cloudflare; no model download or WebGPU is required. Local AI remains optional.</p><label for="aiProviderMode">How should AI run?</label><select id="aiProviderMode"><option value="local">Local only · on this device</option><option value="hybrid">Local first · cloud fallback</option><option value="cloud">Cloudflare AI · online (recommended)</option></select><label class="v36-ai-consent"><input type="checkbox" id="aiCloudConsent"> I explicitly allow cloud AI to receive my prompts and compact tracker context.</label><p class="muted v36-ai-privacy-note">Cloud requests require sign-in. API credentials stay in Supabase secrets, never in this app. Cloud quota and model availability depend on your Cloudflare account.</p><hr><b>Cloud model</b><p class="muted">Automatic uses the configured default. Manual lets you select a model returned by your Cloudflare account catalogue.</p><label for="cloudModelMode">Model selection</label><select id="cloudModelMode"><option value="auto">Automatic · GLM-4.7-Flash default</option><option value="manual">Manual · choose model</option></select><label for="cloudAiModel">Available Cloudflare models</label><select id="cloudAiModel" disabled><option value="">Sign in and refresh catalogue</option></select><button type="button" class="v36-btn secondary" id="cloudModelRefresh">Refresh cloud model catalogue</button><p id="cloudModelInfo" class="muted" role="status">Configured default: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash).</p><hr><b>On-device model</b><label for="localAiModel">Compatible model</label><select id="localAiModel"><option value="">Checking WebGPU and model catalogue…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div class="v36-ai-progress-wrap"><progress id="localAiProgressBar" max="100" value="0" aria-label="Model download progress"></progress><div class="v36-ai-progress-meta"><span id="localAiProgress" class="muted" role="status" aria-live="polite">Model not loaded</span><b id="localAiProgressPercent">0%</b></div></div></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
-          <p class="v36-chat-privacy">AI inference runs locally on this device. Your tracker may still sync saved chat history through your Supabase account.</p>
+          <p class="v36-chat-privacy">Cloud AI uses your selected Cloudflare model. Local AI runs on this device. Chat history may sync through your Supabase account.</p>
         </aside>
         <section class="v36-chat-main">
           <div class="v36-chat-toolbar"><strong id="assistantChatTitle">New conversation</strong><button type="button" class="v36-mini" id="assistantRenameChat">Rename</button></div>
           <div class="v36-chat-messages" id="assistantMessages" aria-live="polite"></div>
           <div class="v36-chat-composer">
             <div class="v36-suggestions"><button data-prompt="I have 3 hours today. What should I study?">Plan 3 hours</button><button data-prompt="Which subjects are weakest?">Weak subjects</button><button data-prompt="What revisions are overdue?">Overdue revision</button><button data-prompt="Analyse my progress this week">Weekly progress</button></div>
-            <textarea id="assistantPrompt" rows="3" placeholder="Ask about your study plan, syllabus, revisions or progress…"></textarea>
+            <textarea id="assistantPrompt" rows="3" placeholder="Ask a medical or study question, request a table/flowchart, analyse progress, or ask me to change tracker data…"></textarea>
             <div class="v36-chat-compose-footer"><small>Enter to send · Shift + Enter for a new line</small><button class="v36-btn primary" id="assistantAsk">Send message ↑</button></div>
           </div>
         </section>
@@ -306,14 +306,95 @@
     s.assistantChats.unshift(chat); s.assistantActiveChatId=chat.id; core.save(); renderAssistant();
     $('assistantPrompt')?.focus();
   }
+  function assistantInline(text) {
+    let h=esc(String(text??''));
+    h=h.replace(/`([^`]+)`/g,'<code>$1</code>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,'<em>$1</em>')
+      .replace(/~~(.+?)~~/g,'<del>$1</del>');
+    return h;
+  }
+  function renderAssistantTable(lines) {
+    const rows=lines.map(line=>line.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim()));
+    if(rows.length<2)return '';
+    const isSep=x=>x.every(c=>/^:?-{3,}:?$/.test(c.replace(/\s/g,'')));
+    const sep=rows.findIndex(isSep); if(sep<0)return '';
+    const header=rows[0], body=rows.slice(sep+1);
+    return `<div class="v36-ai-table-wrap"><table class="v36-ai-table"><thead><tr>${header.map(c=>`<th>${assistantInline(c)}</th>`).join('')}</tr></thead><tbody>${body.map(row=>`<tr>${header.map((_,i)=>`<td>${assistantInline(row[i]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  function renderAssistantFlow(source) {
+    const clean=source.split('\n').map(x=>x.trim()).filter(x=>x&&!/^(flowchart|graph)\s+(TD|TB|LR|RL|BT)$/i.test(x));
+    const edges=[], labels=new Map();
+    for(const line of clean){
+      const m=line.match(/^([A-Za-z0-9_]+)(?:\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})?\s*(?:-->|---|==>|-.->)\s*(?:\|([^|]+)\|)?\s*([A-Za-z0-9_]+)(?:\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})?/);
+      if(!m)continue;
+      const [,a,al,ar,ad,edgeLabel,b,bl,br,bd]=m;
+      labels.set(a,al||ar||ad||a);labels.set(b,bl||br||bd||b);edges.push({a,b,label:edgeLabel||''});
+    }
+    if(!edges.length)return `<pre class="v36-ai-code">${esc(source)}</pre>`;
+    const nodes=[...new Set(edges.flatMap(e=>[e.a,e.b]))];
+    const isChain=edges.every((e,i)=>i===0||edges[i-1].b===e.a);
+    if(isChain){
+      return `<div class="v36-ai-flow" role="img" aria-label="Flow diagram">${nodes.map((n,i)=>`${i?'<span class="v36-ai-flow-arrow" aria-hidden="true">↓</span>':''}<div class="v36-ai-flow-node">${assistantInline(labels.get(n))}</div>`).join('')}</div>`;
+    }
+    return `<div class="v36-ai-flow-list">${edges.map(e=>`<div class="v36-ai-flow-edge"><span class="v36-ai-flow-node">${assistantInline(labels.get(e.a))}</span><span class="v36-ai-flow-connector">→${e.label?`<small>${assistantInline(e.label)}</small>`:''}→</span><span class="v36-ai-flow-node">${assistantInline(labels.get(e.b))}</span></div>`).join('')}</div>`;
+  }
+  function renderAssistantChart(source) {
+    let data;try{data=JSON.parse(source);}catch{return `<pre class="v36-ai-code">${esc(source)}</pre>`;}
+    const labels=Array.isArray(data.labels)?data.labels.slice(0,12):[];
+    const series=Array.isArray(data.series)?data.series.slice(0,4):[];
+    if(!labels.length||!series.length||!series.every(s=>Array.isArray(s.values)&&s.values.length>=labels.length))return `<pre class="v36-ai-code">${esc(source)}</pre>`;
+    const values=series.flatMap(s=>s.values.slice(0,labels.length).map(Number)).filter(Number.isFinite);
+    const max=Math.max(1,...values), min=Math.min(0,...values), w=640,h=260,left=48,right=16,top=20,bottom=54,plotW=w-left-right,plotH=h-top-bottom;
+    const y=v=>top+(max-v)/(max-min||1)*plotH;
+    let shapes='';
+    if((data.type||'bar')==='line'){
+      shapes=series.map((s,si)=>{const pts=s.values.slice(0,labels.length).map((v,i)=>`${left+i*(plotW/Math.max(1,labels.length-1))},${y(Number(v)||0)}`).join(' ');return `<polyline points="${pts}" fill="none" stroke="var(--v36-ai-series-${si%4})" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`}).join('');
+    }else{
+      const group=plotW/labels.length,bw=Math.min(34,group/(series.length+1));
+      shapes=series.map((s,si)=>s.values.slice(0,labels.length).map((v,i)=>{const val=Number(v)||0,bx=left+i*group+group/2-(series.length*bw)/2+si*bw,by=y(val),bh=top+plotH-by;return `<rect x="${bx}" y="${by}" width="${bw-3}" height="${Math.max(0,bh)}" rx="4" fill="var(--v36-ai-series-${si%4})"><title>${esc(s.name||'Series')}: ${val}</title></rect>`}).join('')).join('');
+    }
+    const ticks=Array.from({length:5},(_,i)=>{const val=min+(max-min)*i/4,yy=y(val);return `<line x1="${left}" y1="${yy}" x2="${w-right}" y2="${yy}" stroke="var(--v36-line)" stroke-dasharray="3 4"/><text x="${left-8}" y="${yy+4}" text-anchor="end" fill="currentColor" font-size="11">${Number(val.toFixed(1))}</text>`}).join('');
+    const xlabels=labels.map((l,i)=>`<text x="${left+(i+.5)*(plotW/labels.length)}" y="${h-25}" text-anchor="middle" fill="currentColor" font-size="11">${esc(String(l).slice(0,16))}</text>`).join('');
+    const legend=series.map((s,i)=>`<span><i style="background:var(--v36-ai-series-${i%4})"></i>${assistantInline(s.name||`Series ${i+1}`)}</span>`).join('');
+    return `<div class="v36-ai-chart"><div class="v36-ai-chart-title">${assistantInline(data.title||'Chart')}</div><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(data.title||'Chart')}">${ticks}${shapes}${xlabels}</svg><div class="v36-ai-chart-legend">${legend}</div></div>`;
+  }
   function renderAssistantMarkdown(value) {
-    let html=esc(value ?? '');
-    html=html.replace(/^### (.+)$/gm,'<h4>$1</h4>').replace(/^## (.+)$/gm,'<h3>$1</h3>').replace(/^# (.+)$/gm,'<h3>$1</h3>');
-    html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code>$1</code>');
-    html=html.replace(/^\s*[-•] (.+)$/gm,'<li>$1</li>');
-    html=html.replace(/(?:<li>.*<\/li>\n?)+/g,m=>'<ul>'+m+'</ul>');
-    html=html.replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br>');
-    return '<p>'+html+'</p>';
+    const src=String(value??'').replace(/\r\n/g,'\n');
+    const blocks=src.split(/```([\w-]*)\n([\s\S]*?)```/g);
+    let out='';
+    for(let i=0;i<blocks.length;i++){
+      if(i%3===1){
+        const lang=blocks[i].toLowerCase(), code=blocks[i+1]||'';
+        if(lang==='mermaid')out+=renderAssistantFlow(code);
+        else if(lang==='chart'||lang==='json-chart')out+=renderAssistantChart(code);
+        else out+=`<pre class="v36-ai-code"><code>${esc(code)}</code></pre>`;
+        i++;
+        continue;
+      }
+      const lines=blocks[i].split('\n');let j=0;
+      while(j<lines.length){
+        if(!lines[j].trim()){j++;continue;}
+        if(lines[j].trim().startsWith('|')){
+          const table=[];while(j<lines.length&&lines[j].trim().startsWith('|'))table.push(lines[j++]);
+          const tableHtml=renderAssistantTable(table);out+=tableHtml||`<p>${table.map(assistantInline).join('<br>')}</p>`;continue;
+        }
+        const line=lines[j];
+        const heading=line.match(/^(#{1,4})\s+(.+)$/);
+        if(heading){const level=Math.min(4,heading[1].length);out+=`<h${level+1}>${assistantInline(heading[2])}</h${level+1}>`;j++;continue;}
+        if(/^\s*[-*•]\s+/.test(line)){
+          const items=[];while(j<lines.length&&/^\s*[-*•]\s+/.test(lines[j]))items.push(`<li>${assistantInline(lines[j++].replace(/^\s*[-*•]\s+/,''))}</li>`);
+          out+=`<ul>${items.join('')}</ul>`;continue;
+        }
+        if(/^\s*\d+[.)]\s+/.test(line)){
+          const items=[];while(j<lines.length&&/^\s*\d+[.)]\s+/.test(lines[j]))items.push(`<li>${assistantInline(lines[j++].replace(/^\s*\d+[.)]\s+/,''))}</li>`);
+          out+=`<ol>${items.join('')}</ol>`;continue;
+        }
+        const para=[];while(j<lines.length&&lines[j].trim()&&!lines[j].trim().startsWith('|')&&!/^(#{1,4})\s/.test(lines[j])&&!/^\s*[-*•]\s+/.test(lines[j])&&!/^\s*\d+[.)]\s+/.test(lines[j]))para.push(assistantInline(lines[j++]));
+        out+=`<p>${para.join('<br>')}</p>`;
+      }
+    }
+    return out;
   }
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
@@ -408,6 +489,30 @@
   // Cross-device AI settings and model manager.
   const localModelSelect=$('localAiModel'), localProgress=$('localAiProgress'), localProgressBar=$('localAiProgressBar'), localProgressPercent=$('localAiProgressPercent');
   const providerSelect=$('aiProviderMode'), cloudConsent=$('aiCloudConsent');
+  const cloudModelMode=$('cloudModelMode'), cloudModelSelect=$('cloudAiModel'), cloudModelInfo=$('cloudModelInfo');
+  const CLOUD_MODEL_KEY='MBBS_CLOUD_AI_MODEL', CLOUD_MODE_KEY='MBBS_CLOUD_AI_MODEL_MODE';
+  function syncCloudModelControls(){
+    if(cloudModelMode)cloudModelMode.value=localStorage.getItem(CLOUD_MODE_KEY)||'auto';
+    if(cloudModelSelect){const saved=localStorage.getItem(CLOUD_MODEL_KEY)||'';if(saved&&[...cloudModelSelect.options].some(o=>o.value===saved))cloudModelSelect.value=saved;}
+    if(cloudModelInfo)cloudModelInfo.textContent=cloudModelMode?.value==='manual'?(cloudModelSelect?.selectedOptions?.[0]?.textContent||'Select an available model.'):'Automatic selection uses the configured backend default: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash).';
+  }
+  async function refreshCloudModels(){
+    if(!cloudModelSelect||!core.listAIModels){if(cloudModelInfo)cloudModelInfo.textContent='Model catalogue API is not available in this build.';return;}
+    cloudModelSelect.disabled=true;if(cloudModelInfo)cloudModelInfo.textContent='Loading models available to your Cloudflare account…';
+    try{
+      const data=await core.listAIModels();const models=Array.isArray(data.models)?data.models:[];
+      cloudModelSelect.innerHTML=models.map(m=>`<option value="${esc(m.id)}">${esc(m.id)}${m.description?' · '+esc(m.description.slice(0,90)):''}</option>`).join('')||'<option value="">No text-generation models returned</option>';
+      const saved=localStorage.getItem(CLOUD_MODEL_KEY);
+      if(saved&&models.some(m=>m.id===saved))cloudModelSelect.value=saved;
+      else if(data.defaultModel&&models.some(m=>m.id===data.defaultModel))cloudModelSelect.value=data.defaultModel;
+      cloudModelSelect.disabled=!models.length;
+      if(cloudModelInfo)cloudModelInfo.textContent=`${models.length} text-generation models returned by your Cloudflare account. The default is ${data.defaultModel||'set by backend'}.`;
+      syncCloudModelControls();
+    }catch(e){if(cloudModelInfo)cloudModelInfo.textContent='Could not load catalogue: '+(e.message||e);cloudModelSelect.innerHTML='<option value="">Catalogue unavailable</option>';cloudModelSelect.disabled=true;}
+  }
+  cloudModelMode?.addEventListener('change',()=>{localStorage.setItem(CLOUD_MODE_KEY,cloudModelMode.value);if(cloudModelMode.value==='auto')localStorage.removeItem(CLOUD_MODEL_KEY);syncCloudModelControls();});
+  cloudModelSelect?.addEventListener('change',()=>{if(cloudModelSelect.value)localStorage.setItem(CLOUD_MODEL_KEY,cloudModelSelect.value);syncCloudModelControls();});
+  $('cloudModelRefresh')?.addEventListener('click',refreshCloudModels);
   function localProgressText(text){if(localProgress)localProgress.textContent=text;}
   function updateLocalProgress(p){
     localProgressText(p?.text||'Downloading model…');
@@ -430,6 +535,7 @@
     if(!cloudConsent.checked&&providerSelect&&providerSelect.value!=='local'){providerSelect.value='local';window.MBBS_AI_PROVIDERS.setMode('local');}
   });
   syncProviderControls();
+  syncCloudModelControls();
   async function populateLocalModels(){
     if(!localModelSelect)return;
     if(!window.MBBS_LOCAL_LLM){localModelSelect.innerHTML='<option value="">Local runtime unavailable</option>';localProgressText('The local AI script did not load. Refresh the app and retry.');return;}

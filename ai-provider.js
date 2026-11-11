@@ -3,6 +3,8 @@
   'use strict';
   const MODE_KEY='MBBS_AI_PROVIDER_MODE';
   const CONSENT_KEY='MBBS_AI_CLOUD_CONSENT';
+  const MODEL_KEY='MBBS_CLOUD_AI_MODEL';
+  const MODEL_MODE_KEY='MBBS_CLOUD_AI_MODEL_MODE';
   const config=window.MBBS_AI_CONFIG=window.MBBS_AI_CONFIG||{};
   const savedMode=localStorage.getItem(MODE_KEY);
   // Cloudflare is the requested primary provider. Migrate the old default-local setting once.
@@ -16,10 +18,15 @@
   const adapters=new Map();
   function setMode(mode){if(!['local','cloud','hybrid'].includes(mode))throw new Error('Unknown AI provider mode.');config.mode=mode;localStorage.setItem(MODE_KEY,mode);}
   function setCloudConsent(allowed){config.cloudConsent=!!allowed;localStorage.setItem(CONSENT_KEY,allowed?'yes':'no');}
+  function cloudContext(context){
+    const mode=localStorage.getItem(MODEL_MODE_KEY)||'auto';
+    const selected=mode==='manual'?localStorage.getItem(MODEL_KEY):'';
+    return selected?{...(context||{}),aiModel:selected}:context;
+  }
   async function cloud({message,context,invoke}){
     if(!config.cloudConsent)throw new Error('Cloud AI is disabled. Enable the cloud privacy consent setting first.');
     if(typeof invoke!=='function')throw new Error('Cloud AI requires a signed-in Supabase session.');
-    const result=await invoke({message,context});
+    const result=await invoke({message,context:cloudContext(context)});
     if(!result||typeof result.reply!=='string')throw new Error(result?.error||'Cloud AI returned an invalid response.');
     return {...result,provider:result.provider||'Cloud AI'};
   }
