@@ -1,7 +1,29 @@
 const MODEL = "@cf/zai-org/glm-4.7-flash";
 const ORIGIN = "https://devansh0vaish-glitch.github.io";
-const SYSTEM = `You are an evidence-conscious MBBS undergraduate tutor and study-tracker copilot for a medical student in India. Give accurate, exam-oriented explanations. Use clear headings, concise comparison tables and stepwise mechanisms when useful. Prioritize Robbins and Cotran for pathology, KD Tripathi 8th edition for pharmacology, Apurba Sastry for microbiology and Park for community medicine. Never invent textbook quotations, references, clinical facts, tracker facts, topic keys, dates or task IDs. Use Mermaid flowcharts when useful; use charts only with supplied numerical data. Do not provide patient-specific diagnosis or treatment advice. Propose tracker actions only when explicitly requested, using exact supplied IDs and dates. Allowed actions: complete_topics(topicKeys), set_topic_completion(topicKey,completed), set_daily_goal(target), update_user_goals(weeklyMinutes,weeklyTopics), add_planner_tasks(tasks), remove_planner_tasks(taskIds), update_planner_settings(availableMinutes,newLimit,prioritySubject). The app validates and asks confirmation before writing. Never claim an action was applied. Return only JSON with keys reply (string) and actions (array).`;
-const ALLOWED = new Set(["complete_topics","set_topic_completion","set_daily_goal","update_user_goals","add_planner_tasks","remove_planner_tasks","update_planner_settings"]);
+const SYSTEM = `You are an evidence-conscious MBBS undergraduate tutor and full study-tracker copilot for a medical student in India. Give accurate exam-oriented explanations; prioritize Robbins and Cotran for pathology, KD Tripathi 8th edition for pharmacology, Apurba Sastry for microbiology and Park for community medicine. Never invent textbook quotations, clinical facts, tracker facts, topic keys, dates, task IDs or exam IDs. Use Markdown tables and Mermaid flowcharts when useful; charts only from supplied numerical data. Do not give patient-specific diagnosis or treatment advice.
+
+You can PROPOSE tracker changes only when the user explicitly asks you to make/change/add/mark/save/record/plan something. Use exact IDs, subject names and topic keys in supplied context. Never claim a proposal has been applied. The app validates every proposal and asks the user to confirm before saving.
+
+Allowed actions and exact fields:
+- complete_subject: {subject}
+- complete_topics: {topicKeys[]} (mark complete)
+- set_topics_completion: {topicKeys[],completed:boolean}
+- set_topic_completion: {topicKey,completed:boolean}
+- set_daily_goal: {target:int}
+- update_user_goals: {weeklyMinutes?,weeklyTopics?}
+- add_planner_tasks: {tasks:[{date,topicKey,minutes,type:'study'|'revision'}]}
+- remove_planner_tasks: {taskIds[]} (only supplied existing IDs)
+- update_planner_settings: {availableMinutes?,newLimit?,prioritySubject?}
+- set_revision_eligibility: {topicKeys[],mode:'automatic'|'manual'|'never'}
+- queue_revision: {topicKeys[]}
+- save_topic_hub: {topicKey,notes,importance:'normal'|'high'|'weak',link?,favourite?}
+- add_exam: {name,date,subjects:[]} (empty subjects means full syllabus)
+- add_assessment: {name,date,subject?,score,total,topicKey?,note?,mistakeType?}
+- add_quick_item: {title,itemType:'task'|'reminder'|'idea'|'revision',date?,topicKey?}
+- resolve_mistake: {mistakeId,resolved:boolean}
+
+For subject-wide completion/reopening, use the exact subject name from tracker.subjects; do not require every topic key. For topic-specific actions use exact keys from topicCatalog. If the requested topic is not in the supplied catalogue, ask for clarification rather than inventing an ID. For revision queue and eligibility use exact topic keys. Never modify global master syllabus/admin controls or reset/delete user data through AI. Return only JSON with keys reply (string) and actions (array).`;
+const ALLOWED = new Set(["complete_subject","complete_topics","set_topics_completion","set_topic_completion","set_daily_goal","update_user_goals","add_planner_tasks","remove_planner_tasks","update_planner_settings","set_revision_eligibility","queue_revision","save_topic_hub","add_exam","add_assessment","add_quick_item","resolve_mistake"]);
 function respond(req: Request, body: unknown, status = 200) {
   const headers = new Headers({"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","Vary":"Origin"});
   const origin = req.headers.get("Origin") || "";
@@ -15,11 +37,11 @@ function respond(req: Request, body: unknown, status = 200) {
 function compact(raw: any) {
   const c = raw && typeof raw === "object" ? raw : {};
   const t = c.tracker && typeof c.tracker === "object" ? c.tracker : {};
-  const keys = ["today","syllabus","backlog","subjects","revisionDue","unresolvedMistakes","recentStudyMinutes","recentTopicsCompleted","weeklyGoals","upcomingExams","availableMinutes","topLocalRecommendations","topicCatalog","planner","dailyGoal","userGoals"];
+  const keys = ["today","syllabus","backlog","subjects","revisionDue","unresolvedMistakes","recentStudyMinutes","recentTopicsCompleted","weeklyGoals","upcomingExams","availableMinutes","topLocalRecommendations","topicCatalog","topicCatalogCount","topicCatalogScope","capabilities","capabilityState","planner","dailyGoal","userGoals"];
   const tracker: Record<string,unknown> = {};
   for (const k of keys) if (t[k] !== undefined) tracker[k] = t[k];
-  if (Array.isArray((tracker as any).topicCatalog)) (tracker as any).topicCatalog = (tracker as any).topicCatalog.slice(0,35);
-  if (Array.isArray((tracker as any).subjects)) (tracker as any).subjects = (tracker as any).subjects.slice(0,15);
+
+  // Preserve the complete subject list and the query-scoped topic catalogue.
   if (Array.isArray((tracker as any).planner?.days)) (tracker as any).planner.days = (tracker as any).planner.days.slice(-10);
   return {
     conversation: Array.isArray(c.conversation) ? c.conversation.slice(-6).map((m:any)=>({role:m?.role==="assistant"?"assistant":"user",content:String(m?.content||"").slice(-900)})) : [],
@@ -52,7 +74,7 @@ Deno.serve(async (req: Request) => {
     if (!message) return respond(req,{error:"Enter a question first."},400);
     if (message.length > 6000) return respond(req,{error:"Message is too long."},413);
     const context = JSON.stringify(compact(payload.context));
-    if (context.length > 18000) return respond(req,{error:"Tracker context is too large. Narrow the request and retry."},413);
+    if (context.length > 80000) return respond(req,{error:"Tracker context is too large. Narrow the request and retry."},413);
     const account = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
     const token = Deno.env.get("CLOUDFLARE_API_TOKEN");
     if (!account || !token) return respond(req,{error:"Cloud AI is not configured on the server."},503);
@@ -62,8 +84,8 @@ Deno.serve(async (req: Request) => {
       cf = await fetch(endpoint, {
         method:"POST",
         headers:{Authorization:"Bearer " + token,"Content-Type":"application/json"},
-        body:JSON.stringify({messages:[{role:"system",content:SYSTEM},{role:"user",content:"TRACKER CONTEXT (JSON):\n"+context+"\n\nUSER REQUEST:\n"+message}],max_tokens:1400,temperature:0.1,chat_template_kwargs:{enable_thinking:false}}),
-        signal:AbortSignal.timeout(14000)
+        body:JSON.stringify({messages:[{role:"system",content:SYSTEM},{role:"user",content:"TRACKER CONTEXT (JSON):\n"+context+"\n\nUSER REQUEST:\n"+message}],max_tokens:1200,temperature:0.1,chat_template_kwargs:{enable_thinking:false}}),
+        signal:AbortSignal.timeout(25000)
       });
     } catch (e) {
       console.error("Cloudflare inference transport failure", e instanceof Error ? e.name + ": " + e.message : "unknown");
@@ -94,9 +116,9 @@ Deno.serve(async (req: Request) => {
       catch { parsed = {reply:rawText,actions:[]}; }
     }
     const reply = typeof parsed?.reply === "string" ? parsed.reply : rawText;
-    const actions = Array.isArray(parsed?.actions) ? parsed.actions.filter((a:any)=>a && typeof a==="object" && ALLOWED.has(a.type)).slice(0,5) : [];
+    const actions = Array.isArray(parsed?.actions) ? parsed.actions.filter((a:any)=>a && typeof a==="object" && ALLOWED.has(a.type)).slice(0,20) : [];
     console.log("study-assistant success", JSON.stringify({model:MODEL,replyChars:reply.length,actions:actions.length}));
-    return respond(req,{reply,actions,provider:"Cloudflare Workers AI",model:MODEL});
+    return respond(req,{reply,actions,provider:"Cloudflare Workers AI",model:MODEL,modelLabel:"GLM-4.7-Flash"});
   } catch (e) {
     console.error("study-assistant gateway error",e instanceof Error ? e.name + ": " + e.message : "unknown");
     return respond(req,{error:"The study assistant encountered a temporary server error. Please retry."},200);
