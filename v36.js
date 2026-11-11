@@ -50,20 +50,20 @@
       <div class="v36-card"><h3>Record a test</h3><div class="v36-formgrid"><label>Test name<input id="testName" placeholder="e.g. Marrow GT 01"></label><label>Date<input id="testDate" type="date"></label><label>Subject<select id="testSubject"></select></label><label>Marks obtained<input id="testScore" type="number" min="0" step="any"></label><label>Total marks<input id="testTotal" type="number" min="1" step="any"></label></div><label>Mistake category<select id="testMistakeType"><option value="knowledge">Knowledge gap</option><option value="conceptual">Conceptual error</option><option value="memory">Memory error</option><option value="misinterpretation">Misinterpretation</option><option value="careless">Careless / silly mistake</option></select></label><label>Test notes / mistakes<textarea id="testMistakes" rows="3" placeholder="What went wrong? Which concepts need work?"></textarea></label><label>Link a syllabus topic<select id="testTopic"><option value="">No linked topic</option></select></label><button class="v36-btn primary" id="saveTest">Save assessment</button></div>
       <div class="v36-grid"><div class="v36-card"><h3>Performance summary</h3><div id="testSummary"></div></div><div class="v36-card"><h3>Score trend</h3><div id="testTrend"></div></div></div>
       <div class="v36-card"><h3>Assessment history</h3><div id="testHistory"></div></div>`,
-    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">A separate, persistent conversation space for your study workflow.</p></div><span class="v36-pill" id="assistantMode">Local AI · model not loaded</span></div>
+    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Your MBBS tutor and tracker assistant, powered by one secure cloud model.</p></div><span class="v36-pill" id="assistantMode">Cloud AI · GLM-4.7-Flash</span></div>
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
-          <div class="v36-local-ai-box"><b>AI provider</b><p class="muted">Cloudflare Workers AI runs online through your secured Supabase function. Your question and relevant study-tracker context are sent to Cloudflare; no model download or WebGPU is required. Local AI remains optional.</p><label for="aiProviderMode">How should AI run?</label><select id="aiProviderMode"><option value="local">Local only · on this device</option><option value="hybrid">Local first · cloud fallback</option><option value="cloud">Cloudflare AI · online (recommended)</option></select><label class="v36-ai-consent"><input type="checkbox" id="aiCloudConsent"> I explicitly allow cloud AI to receive my prompts and compact tracker context.</label><p class="muted v36-ai-privacy-note">Cloud requests require sign-in. API credentials stay in Supabase secrets, never in this app. Cloud quota and model availability depend on your Cloudflare account.</p><hr><b>Cloud model</b><p class="muted">Automatic uses the configured default. Manual lets you select a model returned by your Cloudflare account catalogue.</p><label for="cloudModelMode">Model selection</label><select id="cloudModelMode"><option value="auto">Automatic · GLM-4.7-Flash default</option><option value="manual">Manual · choose model</option></select><label for="cloudAiModel">Available Cloudflare models</label><select id="cloudAiModel" disabled><option value="">Sign in and refresh catalogue</option></select><button type="button" class="v36-btn secondary" id="cloudModelRefresh">Refresh cloud model catalogue</button><p id="cloudModelInfo" class="muted" role="status">Configured default: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash).</p><hr><b>On-device model</b><label for="localAiModel">Compatible model</label><select id="localAiModel"><option value="">Checking WebGPU and model catalogue…</option></select><button type="button" class="v36-btn secondary" id="localAiCheck">Check compatibility</button><button type="button" class="v36-btn primary" id="localAiDownload">Download / load model</button><button type="button" class="v36-btn ghost" id="localAiUnload">Unload from memory</button><div class="v36-ai-progress-wrap"><progress id="localAiProgressBar" max="100" value="0" aria-label="Model download progress"></progress><div class="v36-ai-progress-meta"><span id="localAiProgress" class="muted" role="status" aria-live="polite">Model not loaded</span><b id="localAiProgressPercent">0%</b></div></div></div>
+          <div class="v36-cloud-info"><div class="v36-cloud-mark">✦</div><div><b>Cloud AI</b><small>GLM-4.7-Flash</small></div><span class="v36-online-dot"></span><p>Your prompts and relevant tracker context are securely sent through Supabase to Cloudflare Workers AI. Sign-in and internet access are required.</p></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
-          <p class="v36-chat-privacy">Cloud AI uses your selected Cloudflare model. Local AI runs on this device. Chat history may sync through your Supabase account.</p>
+          <p class="v36-chat-privacy">One model for every conversation. Chat history syncs through your Supabase account.</p>
         </aside>
         <section class="v36-chat-main">
           <div class="v36-chat-toolbar"><strong id="assistantChatTitle">New conversation</strong><button type="button" class="v36-mini" id="assistantRenameChat">Rename</button></div>
           <div class="v36-chat-messages" id="assistantMessages" aria-live="polite"></div>
           <div class="v36-chat-composer">
             <div class="v36-suggestions"><button data-prompt="I have 3 hours today. What should I study?">Plan 3 hours</button><button data-prompt="Which subjects are weakest?">Weak subjects</button><button data-prompt="What revisions are overdue?">Overdue revision</button><button data-prompt="Analyse my progress this week">Weekly progress</button></div>
-            <textarea id="assistantPrompt" rows="3" placeholder="Ask a medical or study question, request a table/flowchart, analyse progress, or ask me to change tracker data…"></textarea>
+            <textarea id="assistantPrompt" rows="3" placeholder="Ask a medical question, request a table or flowchart, analyse progress, or change tracker data…"></textarea>
             <div class="v36-chat-compose-footer"><small>Enter to send · Shift + Enter for a new line</small><button class="v36-btn primary" id="assistantAsk">Send message ↑</button></div>
           </div>
         </section>
@@ -399,7 +399,7 @@
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
     $('assistantChatTitle').textContent=chat.title || 'New conversation';
-    $('assistantMode').textContent=window.MBBS_AI_CONFIG?.mode==='cloud'?'Cloud AI mode':window.MBBS_AI_CONFIG?.mode==='hybrid'?'Local first · cloud fallback':window.MBBS_LOCAL_LLM?.status?.engine?'Local AI ready':'Local AI · model not loaded';
+    $('assistantMode').textContent='Cloud AI · GLM-4.7-Flash';
     list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
     messages.innerHTML=(chat.messages||[]).map((m,i)=>{
       const role=m.role==='user'?'user':'assistant';
@@ -486,96 +486,15 @@
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
   }
-  // Cross-device AI settings and model manager.
-  const localModelSelect=$('localAiModel'), localProgress=$('localAiProgress'), localProgressBar=$('localAiProgressBar'), localProgressPercent=$('localAiProgressPercent');
-  const providerSelect=$('aiProviderMode'), cloudConsent=$('aiCloudConsent');
-  const cloudModelMode=$('cloudModelMode'), cloudModelSelect=$('cloudAiModel'), cloudModelInfo=$('cloudModelInfo');
-  const CLOUD_MODEL_KEY='MBBS_CLOUD_AI_MODEL', CLOUD_MODE_KEY='MBBS_CLOUD_AI_MODEL_MODE';
-  function syncCloudModelControls(){
-    if(cloudModelMode)cloudModelMode.value=localStorage.getItem(CLOUD_MODE_KEY)||'auto';
-    if(cloudModelSelect){const saved=localStorage.getItem(CLOUD_MODEL_KEY)||'';if(saved&&[...cloudModelSelect.options].some(o=>o.value===saved))cloudModelSelect.value=saved;}
-    if(cloudModelInfo)cloudModelInfo.textContent=cloudModelMode?.value==='manual'?(cloudModelSelect?.selectedOptions?.[0]?.textContent||'Select an available model.'):'Automatic selection uses the configured backend default: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash).';
-  }
-  async function refreshCloudModels(){
-    if(!cloudModelSelect||!core.listAIModels){if(cloudModelInfo)cloudModelInfo.textContent='Model catalogue API is not available in this build.';return;}
-    cloudModelSelect.disabled=true;if(cloudModelInfo)cloudModelInfo.textContent='Loading models available to your Cloudflare account…';
-    try{
-      const data=await core.listAIModels();const models=Array.isArray(data.models)?data.models:[];
-      cloudModelSelect.innerHTML=models.map(m=>`<option value="${esc(m.id)}">${esc(m.id)}${m.description?' · '+esc(m.description.slice(0,90)):''}</option>`).join('')||'<option value="">No text-generation models returned</option>';
-      const saved=localStorage.getItem(CLOUD_MODEL_KEY);
-      if(saved&&models.some(m=>m.id===saved))cloudModelSelect.value=saved;
-      else if(data.defaultModel&&models.some(m=>m.id===data.defaultModel))cloudModelSelect.value=data.defaultModel;
-      cloudModelSelect.disabled=!models.length;
-      if(cloudModelInfo)cloudModelInfo.textContent=`${models.length} text-generation models returned by your Cloudflare account. The default is ${data.defaultModel||'set by backend'}.`;
-      syncCloudModelControls();
-    }catch(e){if(cloudModelInfo)cloudModelInfo.textContent='Could not load catalogue: '+(e.message||e);cloudModelSelect.innerHTML='<option value="">Catalogue unavailable</option>';cloudModelSelect.disabled=true;}
-  }
-  cloudModelMode?.addEventListener('change',()=>{localStorage.setItem(CLOUD_MODE_KEY,cloudModelMode.value);if(cloudModelMode.value==='auto')localStorage.removeItem(CLOUD_MODEL_KEY);syncCloudModelControls();});
-  cloudModelSelect?.addEventListener('change',()=>{if(cloudModelSelect.value)localStorage.setItem(CLOUD_MODEL_KEY,cloudModelSelect.value);syncCloudModelControls();});
-  $('cloudModelRefresh')?.addEventListener('click',refreshCloudModels);
-  function localProgressText(text){if(localProgress)localProgress.textContent=text;}
-  function updateLocalProgress(p){
-    localProgressText(p?.text||'Downloading model…');
-    const fraction=Number(p?.progress);
-    if(localProgressBar){if(Number.isFinite(fraction)&&fraction>=0){localProgressBar.value=Math.min(100,Math.max(0,fraction*100));localProgressBar.setAttribute('value',String(localProgressBar.value));}else localProgressBar.removeAttribute('value');}
-    if(localProgressPercent)localProgressPercent.textContent=Number.isFinite(fraction)&&fraction>=0?Math.round(Math.min(1,fraction)*100)+'%':'…';
-  }
-  function syncProviderControls(){
-    if(providerSelect)providerSelect.value=window.MBBS_AI_CONFIG?.mode||'local';
-    if(cloudConsent)cloudConsent.checked=!!window.MBBS_AI_CONFIG?.cloudConsent;
-  }
-  providerSelect?.addEventListener('change',()=>{
-    const mode=providerSelect.value;
-    if((mode==='cloud'||mode==='hybrid')&&!cloudConsent?.checked){providerSelect.value='local';alert('Enable the cloud privacy consent checkbox first. No information has been sent.');return;}
-    window.MBBS_AI_PROVIDERS.setMode(mode);
-    $('assistantMode').textContent=mode==='local'?'Local AI mode':mode==='cloud'?'Cloud AI mode':'Local first · cloud fallback';
-  });
-  cloudConsent?.addEventListener('change',()=>{
-    window.MBBS_AI_PROVIDERS.setCloudConsent(cloudConsent.checked);
-    if(!cloudConsent.checked&&providerSelect&&providerSelect.value!=='local'){providerSelect.value='local';window.MBBS_AI_PROVIDERS.setMode('local');}
-  });
-  syncProviderControls();
-  syncCloudModelControls();
-  async function populateLocalModels(){
-    if(!localModelSelect)return;
-    if(!window.MBBS_LOCAL_LLM){localModelSelect.innerHTML='<option value="">Local runtime unavailable</option>';localProgressText('The local AI script did not load. Refresh the app and retry.');return;}
-    localModelSelect.disabled=true;localProgressText('Checking WebGPU and loading compatible model catalogue…');
-    try{
-      const compatibility=await window.MBBS_LOCAL_LLM.check();
-      const items=await window.MBBS_LOCAL_LLM.models();
-      localModelSelect.innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.label)} · ${Math.round(x.vramMB)} MB · ${esc(x.note)}</option>`).join('')||'<option value="">No compatible model build found</option>';
-      const saved=localStorage.getItem('MBBS_LOCAL_LLM_MODEL');if(saved&&items.some(x=>x.id===saved))localModelSelect.value=saved;
-      const preferred=items.find(x=>x.id==='Qwen3.5-2B-q4f16_1-MLC')||items.find(x=>x.recommended)||items[0];
-      if(!saved&&preferred)localModelSelect.value=preferred.id;
-      localProgressText(compatibility.supported?'Model catalogue ready. Choose a model and download it once on this device.':!compatibility.secure?'Local AI requires HTTPS.': 'No usable WebGPU adapter detected. Use cloud AI or another compatible browser/device.');
-    }catch(e){localModelSelect.innerHTML='<option value="">Could not load model catalogue</option>';localProgressText('Model catalogue error: '+(e.message||e));}
-    finally{localModelSelect.disabled=false;}
-  }
-  $('localAiCheck')?.addEventListener('click',async()=>{
-    try{const c=await window.MBBS_LOCAL_LLM.check();localProgressText(c.supported?'WebGPU is available. Select a model and download it.':!c.secure?'HTTPS is required for local AI.':'No usable WebGPU adapter was found. Cloud AI remains available if enabled.');}
-    catch(e){localProgressText(e.message||'Compatibility check failed.');}
-  });
-  $('localAiDownload')?.addEventListener('click',async()=>{
-    const id=localModelSelect?.value;if(!id){localProgressText('No compatible model is selected. Reload the model catalogue.');return;}
-    const b=$('localAiDownload');b.disabled=true;b.textContent='Starting…';updateLocalProgress({text:'Connecting to WebLLM and preparing model…'});
-    try{
-      await window.MBBS_LOCAL_LLM.load(id,updateLocalProgress);
-      if(localProgressBar){localProgressBar.value=100;localProgressBar.setAttribute('value','100');}
-      if(localProgressPercent)localProgressPercent.textContent='100%';
-      localProgressText('Model loaded and ready. It is cached by this browser for future sessions.');$('assistantMode').textContent='Local AI ready';
-    }catch(e){if(localProgressBar){localProgressBar.value=0;localProgressBar.setAttribute('value','0');}if(localProgressPercent)localProgressPercent.textContent='Failed';localProgressText('Unable to load model: '+(e.message||e));}
-    finally{b.disabled=false;b.textContent='Download / load model';}
-  });
-  $('localAiUnload')?.addEventListener('click',async()=>{try{await window.MBBS_LOCAL_LLM.unload();localProgressText(window.MBBS_LOCAL_LLM.status.progress);if(localProgressBar){localProgressBar.value=0;localProgressBar.setAttribute('value','0');}if(localProgressPercent)localProgressPercent.textContent='0%';}catch(e){localProgressText(e.message||'Could not unload model.');}});
-  window.addEventListener('mbbs-local-ai-status',e=>{if(e.detail?.progress)localProgressText(e.detail.progress);});
-  populateLocalModels();
-
-  async function sendAssistantMessage() {
+  // Single cloud AI provider. No local model, provider switch, or manual model selector.
+  const assistantMode=$('assistantMode');
+  if(assistantMode)assistantMode.textContent='Cloud AI · GLM-4.7-Flash';
+    async function sendAssistantMessage() {
     const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
     const chat=ensureAssistantChat(), now=new Date().toISOString();
     chat.messages.push({role:'user',content:promptText,createdAt:now});chat.updatedAt=now;
     if(chat.title==='New conversation')chat.title=promptText.slice(0,48)+(promptText.length>48?'…':'');
-    input.value='';core.save();renderAssistant();$('assistantAsk').disabled=true;$('assistantMode').textContent='Thinking…';
+    input.value='';core.save();renderAssistant();$('assistantAsk').disabled=true;$('assistantMode').textContent='Connecting to cloud AI…';
     const pending={role:'assistant',content:'Checking your recent conversation and study data…',createdAt:new Date().toISOString(),pending:true};chat.messages.push(pending);renderAssistant();
     try {
       const trackerContext=buildAssistantContext(promptText);
@@ -587,9 +506,9 @@
       const result=await core.askAI(promptText,{conversation,conversationSummary:chat.aiDigest||'',tracker:trackerContext});
       pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
       pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
-      $('assistantMode').textContent=result.provider||result.model||'Local AI';
+      $('assistantMode').textContent='Cloud AI · '+(result.model?.includes('glm-4.7-flash')?'GLM-4.7-Flash':'ready');
     } catch(err) {
-      pending.pending=false;pending.model='Local fallback';pending.content=assistantAnswer(promptText)+'\n\n_AI provider unavailable: '+(err.message||'request failed')+'. This response is based on locally available tracker data; no AI action was applied._';pending.actions=[];$('assistantMode').textContent='Local AI unavailable';
+      pending.pending=false;pending.model='Cloud AI unavailable';pending.content='I could not reach the cloud study assistant. No tracker changes were made.\n\n**Error:** '+(err.message||'Request failed')+'\n\nPlease check your internet connection and sign-in, then retry.';pending.actions=[];$('assistantMode').textContent='Cloud AI unavailable';
     } finally {
       chat.updatedAt=new Date().toISOString();core.save();renderAssistant();$('assistantAsk').disabled=false;
     }

@@ -8,13 +8,13 @@ The browser never receives the Cloudflare API token. The Edge Function verifies 
 
 ## Model selected
 
-`@cf/meta/llama-3.3-70b-instruct-fp8-fast`
+`@cf/zai-org/glm-4.7-flash`
 
-Why: Cloudflare currently documents this as a hosted 70B model with a 24,000-token context window and function-calling support. It is also listed as supporting JSON Mode, which fits the tracker's structured reply/action format. It is a better candidate for MBBS explanations and reliable structured output than a tiny on-device model, but it still needs real-world evaluation for medical accuracy.
+Why: GLM-4.7-Flash is the single fixed cloud model used by the tracker. There is no manual model picker, on-device model, or automatic provider switching. As with any medical AI, verify important clinical and exam facts against the recommended textbooks.
 
 ## Strict-free-tier requirement
 
-Cloudflare Workers AI documents a free allocation of 10,000 Neurons per day. On the Workers Free plan, requests stop when the free limit is exceeded. On the Workers Paid plan, usage above the free allocation is billed. To keep this project strictly free, keep the Cloudflare Workers plan on **Free** and do not enable paid overage or upgrade. The function does not retry to another provider and has no paid fallback.
+Cloudflare Workers AI documents a free allocation of 10,000 Neurons per day. On the Workers Free plan, requests stop when the free limit is exceeded. On the Workers Paid plan, usage above the free allocation is billed. To keep this project strictly free, keep the Cloudflare Workers plan on **Free** and do not enable paid overage or upgrade. The function does not retry to another provider and has no paid fallback. The frontend contains no on-device model runtime.
 
 ## One-time credentials setup
 
@@ -34,7 +34,7 @@ Upload the contents of this ZIP to the repository's `main` branch, replacing the
 
 ## Privacy behaviour
 
-The user has opted into Cloud AI. The function sends the current question, up to the last eight conversation turns, a short conversation summary, and a limited allow-list of tracker fields (study progress, topic catalog, planner, goals, upcoming exams). It does not forward authentication headers, passwords, email addresses, or arbitrary top-level payload fields. Requests are not cached by the function. Avoid entering patient-identifiable information or other sensitive personal data into the assistant.
+Cloud AI is the only assistant provider. The function sends the current question, up to the last eight conversation turns, a short conversation summary, and a limited allow-list of tracker fields (study progress, topic catalog, planner, goals, upcoming exams). It does not forward authentication headers, passwords, email addresses, or arbitrary top-level payload fields. Requests are not cached by the function. Avoid entering patient-identifiable information or other sensitive personal data into the assistant.
 
 ## Verification
 

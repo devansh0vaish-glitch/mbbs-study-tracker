@@ -1,5 +1,4 @@
 MBBS Study Tracker V36
-AI chat rendering + cloud model selector + tracker action UX
-Frontend cache: mbbs-v36-shell-9-ai-rich-chat
-Supabase Edge Function: study-assistant v39 (deployed separately)
-Cloud default model: @cf/zai-org/glm-4.7-flash
+Cloudflare Workers AI integration update
+Backend function: study-assistant (Supabase Edge Function v28)
+Primary cloud model: @cf/meta/llama-3.3-70b-instruct-fp8-fast
