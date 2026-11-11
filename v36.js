@@ -50,11 +50,11 @@
       <div class="v36-card"><h3>Record a test</h3><div class="v36-formgrid"><label>Test name<input id="testName" placeholder="e.g. Marrow GT 01"></label><label>Date<input id="testDate" type="date"></label><label>Subject<select id="testSubject"></select></label><label>Marks obtained<input id="testScore" type="number" min="0" step="any"></label><label>Total marks<input id="testTotal" type="number" min="1" step="any"></label></div><label>Mistake category<select id="testMistakeType"><option value="knowledge">Knowledge gap</option><option value="conceptual">Conceptual error</option><option value="memory">Memory error</option><option value="misinterpretation">Misinterpretation</option><option value="careless">Careless / silly mistake</option></select></label><label>Test notes / mistakes<textarea id="testMistakes" rows="3" placeholder="What went wrong? Which concepts need work?"></textarea></label><label>Link a syllabus topic<select id="testTopic"><option value="">No linked topic</option></select></label><button class="v36-btn primary" id="saveTest">Save assessment</button></div>
       <div class="v36-grid"><div class="v36-card"><h3>Performance summary</h3><div id="testSummary"></div></div><div class="v36-card"><h3>Score trend</h3><div id="testTrend"></div></div></div>
       <div class="v36-card"><h3>Assessment history</h3><div id="testHistory"></div></div>`,
-    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Your MBBS tutor and tracker assistant, powered by one secure cloud model.</p></div><span class="v36-pill" id="assistantMode">Cloud AI · Llama 3.3 70B Fast</span></div>
+    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Your MBBS tutor and tracker assistant, powered by one secure cloud model.</p></div><span class="v36-pill" id="assistantMode">Cloud AI · GLM-4.7-Flash</span></div>
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
-          <div class="v36-cloud-info"><div class="v36-cloud-mark">✦</div><div><b>Cloud AI</b><small>Llama 3.3 70B Fast</small></div><span class="v36-online-dot"></span><p>Your prompts and relevant tracker context are securely sent through Supabase to Cloudflare Workers AI. Sign-in and internet access are required.</p></div>
+          <div class="v36-cloud-info"><div class="v36-cloud-mark">✦</div><div><b>Cloud AI</b><small>GLM-4.7-Flash</small></div><span class="v36-online-dot"></span><p>Your prompts and relevant tracker context are securely sent through Supabase to Cloudflare Workers AI. Sign-in and internet access are required.</p></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
           <p class="v36-chat-privacy">One model for every conversation. Chat history syncs through your Supabase account.</p>
         </aside>
@@ -403,10 +403,19 @@
     }
     return out;
   }
+  const AI_MODEL_ID = '@cf/zai-org/glm-4.7-flash';
+  const AI_MODEL_LABEL = 'GLM-4.7-Flash';
+  function assistantModelLabel(model) {
+    const value=String(model||'').toLowerCase();
+    if(value.includes('glm-4.7-flash')) return AI_MODEL_LABEL;
+    if(value.includes('llama')) return 'Unverified model';
+    return model ? String(model) : AI_MODEL_LABEL;
+  }
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
     $('assistantChatTitle').textContent=chat.title || 'New conversation';
-    $('assistantMode').textContent='Cloud AI · Llama 3.3 70B Fast';
+    const lastAssistantModel=(chat.messages||[]).filter(m=>m.role==='assistant'&&!m.pending).at(-1)?.model;
+    $('assistantMode').textContent='Cloud AI · '+(lastAssistantModel?assistantModelLabel(lastAssistantModel):AI_MODEL_LABEL);
     list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
     messages.innerHTML=(chat.messages||[]).map((m,i)=>{
       const role=m.role==='user'?'user':'assistant';
@@ -433,6 +442,8 @@
     core.save(); renderAssistant();
   }
   function describeAssistantAction(a) {
+    if(a.type==='complete_subject')return `Mark the entire ${a.subject} subject completed`;
+    if(a.type==='set_topics_completion')return `${a.completed?'Complete':'Reopen'} ${a.topicKeys?.length||0} topic(s)`;
     if(a.type==='complete_topics')return `Mark ${a.topicKeys?.length||0} topic(s) completed`;
     if(a.type==='set_topic_completion')return `${a.completed?'Complete':'Reopen'} topic: ${topics().find(x=>x.k===a.topicKey)?.t.title||a.topicKey}`;
     if(a.type==='set_daily_goal')return `Set today's target to ${a.target} new topic(s)`;
@@ -440,6 +451,13 @@
     if(a.type==='remove_planner_tasks')return `Remove ${a.taskIds?.length||0} planner task(s)`;
     if(a.type==='add_planner_tasks')return `Add ${a.tasks?.length||0} task(s) to the planner`;
     if(a.type==='update_planner_settings')return `Update planner settings${a.availableMinutes?` · ${a.availableMinutes} min/day`:''}`;
+    if(a.type==='set_revision_eligibility')return `Set revision eligibility to ${a.mode} for ${a.topicKeys?.length||0} topic(s)`;
+    if(a.type==='queue_revision')return `Add ${a.topicKeys?.length||0} topic(s) to revision queue`;
+    if(a.type==='save_topic_hub')return `Save Topic Hub notes for ${topics().find(x=>x.k===a.topicKey)?.t.title||'topic'}`;
+    if(a.type==='add_exam')return `Add examination: ${a.name} (${a.date})`;
+    if(a.type==='add_assessment')return `Record assessment: ${a.name} (${a.score}/${a.total})`;
+    if(a.type==='add_quick_item')return `Add quick capture: ${a.title}`;
+    if(a.type==='resolve_mistake')return `${a.resolved?'Resolve':'Reopen'} test mistake`;
     return 'Unrecognised tracker action';
   }
   function normalizeAssistantAction(raw) {
@@ -448,9 +466,12 @@
     if(typeof nested==='string'){try{nested=JSON.parse(nested)}catch{nested={}}}
     const a={...raw,...(nested&&typeof nested==='object'?nested:{})};
     a.type=a.type||a.action||a.name||raw.tool;
-    const aliases={completeTopics:'complete_topics',setTopicCompletion:'set_topic_completion',setDailyGoal:'set_daily_goal',updateUserGoals:'update_user_goals',addPlannerTasks:'add_planner_tasks',removePlannerTasks:'remove_planner_tasks',updatePlannerSettings:'update_planner_settings'};
+    const aliases={completeTopics:'complete_topics',completeSubject:'complete_subject',setTopicsCompletion:'set_topics_completion',setTopicCompletion:'set_topic_completion',setDailyGoal:'set_daily_goal',updateUserGoals:'update_user_goals',addPlannerTasks:'add_planner_tasks',removePlannerTasks:'remove_planner_tasks',updatePlannerSettings:'update_planner_settings',setRevisionEligibility:'set_revision_eligibility',queueRevision:'queue_revision',saveTopicHub:'save_topic_hub',addExam:'add_exam',addAssessment:'add_assessment',addQuickItem:'add_quick_item',resolveMistake:'resolve_mistake'};
     a.type=aliases[a.type]||a.type;
     if(a.topic_keys&&!a.topicKeys)a.topicKeys=a.topic_keys;
+    if(a.subject_name&&!a.subject)a.subject=a.subject_name;
+    if(a.completed===undefined&&a.status==='completed')a.completed=true;
+    if(a.completed===undefined&&a.status==='pending')a.completed=false;
     if(a.task_ids&&!a.taskIds)a.taskIds=a.task_ids;
     if(a.topic_key&&!a.topicKey)a.topicKey=a.topic_key;
     if(a.weekly_minutes!==undefined&&a.weeklyMinutes===undefined)a.weeklyMinutes=a.weekly_minutes;
@@ -459,19 +480,29 @@
     if(a.new_limit!==undefined&&a.newLimit===undefined)a.newLimit=a.new_limit;
     if(a.priority_subject!==undefined&&a.prioritySubject===undefined)a.prioritySubject=a.priority_subject;
     if(a.type==='complete_topics'&&!a.topicKeys&&Array.isArray(a.topics))a.topicKeys=a.topics;
+    if(a.mistake_id&&!a.mistakeId)a.mistakeId=a.mistake_id;
+    if(a.item_type&&!a.itemType)a.itemType=a.item_type;
     if(a.type==='add_planner_tasks'&&Array.isArray(a.tasks))a.tasks=a.tasks.map(t=>({...t,topicKey:t.topicKey||t.topic_key,date:t.date||t.day,minutes:Number(t.minutes||t.durationMinutes||t.duration_minutes),type:t.type||'study'}));
     return a;
   }
   function validateAssistantAction(a) {
     if(!a||typeof a!=='object')return false;
     const all=topics(), validKeys=new Set(all.map(x=>x.k));
-    if(a.type==='complete_topics')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=30&&a.topicKeys.every(k=>validKeys.has(k));
+    if(a.type==='complete_subject')return typeof a.subject==='string'&&core.subjects().some(x=>x===a.subject||core.subjectLabel(x)===a.subject);
+    if(a.type==='set_topics_completion')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=500&&a.topicKeys.every(k=>validKeys.has(k))&&typeof a.completed==='boolean';
+    if(a.type==='complete_topics')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=500&&a.topicKeys.every(k=>validKeys.has(k));
     if(a.type==='add_planner_tasks')return Array.isArray(a.tasks)&&a.tasks.length>0&&a.tasks.length<=14&&a.tasks.every(t=>{const d=Date.parse(t.date+'T12:00:00');return validKeys.has(t.topicKey)&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&Number.isFinite(d)&&t.date>=today()&&['study','revision'].includes(t.type)&&Number.isFinite(Number(t.minutes))&&Number(t.minutes)>=5&&Number(t.minutes)<=240;});
     if(a.type==='update_planner_settings')return (a.availableMinutes===undefined||(Number.isInteger(a.availableMinutes)&&a.availableMinutes>=30&&a.availableMinutes<=960))&&(a.newLimit===undefined||(Number.isInteger(a.newLimit)&&a.newLimit>=1&&a.newLimit<=30))&&(a.prioritySubject===undefined||a.prioritySubject===''||core.subjects().includes(a.prioritySubject));
     if(a.type==='set_topic_completion')return validKeys.has(a.topicKey)&&typeof a.completed==='boolean';
     if(a.type==='set_daily_goal')return Number.isInteger(a.target)&&a.target>=1&&a.target<=100;
     if(a.type==='update_user_goals')return (a.weeklyMinutes!==undefined||a.weeklyTopics!==undefined)&&(a.weeklyMinutes===undefined||(Number.isInteger(a.weeklyMinutes)&&a.weeklyMinutes>=60&&a.weeklyMinutes<=10080))&&(a.weeklyTopics===undefined||(Number.isInteger(a.weeklyTopics)&&a.weeklyTopics>=1&&a.weeklyTopics<=300));
     if(a.type==='remove_planner_tasks'){const ids=new Set(Object.values(state().planner?.days||{}).flatMap(p=>(p?.tasks||[]).map(t=>t.id)));return Array.isArray(a.taskIds)&&a.taskIds.length>0&&a.taskIds.length<=30&&a.taskIds.every(id=>ids.has(id));}
+    if(a.type==='set_revision_eligibility'||a.type==='queue_revision')return Array.isArray(a.topicKeys)&&a.topicKeys.length>0&&a.topicKeys.length<=500&&a.topicKeys.every(k=>validKeys.has(k))&&(a.type==='queue_revision'||['automatic','manual','never'].includes(a.mode));
+    if(a.type==='save_topic_hub')return validKeys.has(a.topicKey)&&typeof a.notes==='string'&&a.notes.length<=12000&&['normal','high','weak'].includes(a.importance||'normal')&&(a.link===undefined||a.link===''||/^https?:\/\//i.test(a.link))&&(a.favourite===undefined||typeof a.favourite==='boolean');
+    if(a.type==='add_exam')return typeof a.name==='string'&&a.name.trim().length>0&&a.name.length<=100&&/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&Date.parse(a.date+'T12:00:00')>=Date.parse(today()+'T00:00:00')&&Array.isArray(a.subjects)&&a.subjects.every(x=>core.subjects().includes(x));
+    if(a.type==='add_assessment')return typeof a.name==='string'&&a.name.trim().length>0&&a.name.length<=100&&/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&Number.isFinite(Number(a.score))&&Number(a.score)>=0&&Number.isFinite(Number(a.total))&&Number(a.total)>0&&Number(a.score)<=Number(a.total)&&(a.subject===undefined||a.subject===''||core.subjects().includes(a.subject))&&(a.topicKey===undefined||a.topicKey===''||validKeys.has(a.topicKey))&&String(a.note||'').length<=3000;
+    if(a.type==='add_quick_item')return typeof a.title==='string'&&a.title.trim().length>0&&a.title.length<=240&&['task','reminder','idea','revision'].includes(a.itemType||'task')&&(a.date===undefined||a.date===''||/^\d{4}-\d{2}-\d{2}$/.test(a.date))&&(a.topicKey===undefined||a.topicKey===''||validKeys.has(a.topicKey));
+    if(a.type==='resolve_mistake')return typeof a.mistakeId==='string'&&state().mistakes.some(m=>m.id===a.mistakeId)&&typeof a.resolved==='boolean';
     return false;
   }
   function applyAssistantProposal(token) {
@@ -481,7 +512,9 @@
     if(!confirm(`Apply this change to your tracker?\n\n${summary}\n\nYour tracker data will be saved and synced when online.`))return;
     const s=state();
     try {
-      if(action.type==='complete_topics') action.topicKeys.forEach(k=>core.setTopicCompletion(k,true));
+      if(action.type==='complete_subject'){const subjectId=core.subjects().find(x=>x===action.subject||core.subjectLabel(x)===action.subject);topics().filter(x=>x.s===subjectId).forEach(x=>core.setTopicCompletion(x.k,true));}
+      else if(action.type==='set_topics_completion') action.topicKeys.forEach(k=>core.setTopicCompletion(k,action.completed));
+      else if(action.type==='complete_topics') action.topicKeys.forEach(k=>core.setTopicCompletion(k,true));
       else if(action.type==='set_topic_completion') core.setTopicCompletion(action.topicKey,action.completed);
       else if(action.type==='set_daily_goal') core.setDailyGoal(action.target);
       else if(action.type==='update_user_goals'){s.userGoals||={};if(action.weeklyMinutes!==undefined)s.userGoals.weeklyMinutes=action.weeklyMinutes;if(action.weeklyTopics!==undefined)s.userGoals.weeklyTopics=action.weeklyTopics;}
@@ -493,8 +526,25 @@
         for(const plan of Object.values(s.planner?.days||{})){plan.tasks=(plan.tasks||[]).filter(t=>!action.taskIds.includes(t.id));}
       } else if(action.type==='update_planner_settings') {
         s.planner ||= {}; if(action.availableMinutes!==undefined)s.planner.availableMinutes=action.availableMinutes;if(action.newLimit!==undefined)s.planner.newLimit=action.newLimit;if(action.prioritySubject!==undefined)s.planner.prioritySubject=action.prioritySubject;
+      } else if(action.type==='set_revision_eligibility') {
+        s.revision.eligibility ||= {}; action.topicKeys.forEach(k=>{s.revision.eligibility[k]=action.mode;});
+      } else if(action.type==='queue_revision') {
+        s.revision.manualQueue ||= []; action.topicKeys.forEach(k=>{if(!s.revision.manualQueue.includes(k))s.revision.manualQueue.push(k);});
+      } else if(action.type==='save_topic_hub') {
+        s.topicNotes ||= {}; s.favourites ||= {}; s.topicNotes[action.topicKey]={notes:action.notes,importance:action.importance||'normal',link:action.link||'',updatedAt:today()}; if(action.favourite!==undefined)s.favourites[action.topicKey]=action.favourite;
+      } else if(action.type==='add_exam') {
+        s.exams ||= []; s.exams.push({id:'ex-'+Date.now().toString(36),name:action.name.trim(),date:action.date,subjects:action.subjects||[],createdAt:new Date().toISOString()});
+      } else if(action.type==='add_assessment') {
+        s.assessments ||= []; const rec={id:'ai-test-'+Date.now().toString(36),name:action.name.trim(),date:action.date,subject:action.subject||'',score:Number(action.score),total:Number(action.total),topicKey:action.topicKey||'',note:String(action.note||''),createdAt:new Date().toISOString()}; s.assessments.push(rec); if(rec.topicKey&&rec.note){s.mistakes ||= [];s.mistakes.push({id:'ai-mistake-'+Date.now().toString(36),assessmentId:rec.id,topicKey:rec.topicKey,note:rec.note,type:action.mistakeType||'knowledge',date:rec.date,due:today(),resolved:false});}
+      } else if(action.type==='add_quick_item') {
+        s.quickItems ||= []; const x=topics().find(t=>t.k===action.topicKey); s.quickItems.push({id:'ai-quick-'+Date.now().toString(36),title:action.title.trim(),type:action.itemType||'task',date:action.date||'',topicKey:action.topicKey||'',topicTitle:x?.t.title||'',done:false,createdAt:new Date().toISOString()});
+      } else if(action.type==='resolve_mistake') {
+        const m=s.mistakes.find(x=>x.id===action.mistakeId); if(m)m.resolved=action.resolved;
       }
-      action.applied=true;action.appliedAt=new Date().toISOString();core.save();window.MBBS_V36_REFRESH?.();renderAssistant();alert('Tracker updated successfully.');
+      core.save();
+      const saved=JSON.parse(localStorage.getItem(localStorage.getItem('MBBS_LAST_USER')?'MBBS_STUDY_TRACKER_'+localStorage.getItem('MBBS_LAST_USER'):'MBBS_STUDY_TRACKER_V9')||'null');
+      if(!saved)throw new Error('Local save verification failed.');
+      action.applied=true;action.appliedAt=new Date().toISOString();core.save();window.MBBS_V36_REFRESH?.();renderAssistant();alert('Tracker updated and saved on this device. Cloud sync will follow when online.');
     } catch(err){console.error('Assistant action failed',err);alert('The tracker could not apply this change: '+(err.message||'Unknown error'));}
   }
   function buildAssistantContext(query='') {
@@ -502,20 +552,24 @@
     const words=q.split(/[^a-z0-9]+/).filter(w=>w.length>2&&!['the','and','for','with','what','which','how','can','you','please','from','into','this','that','have','should','about','today','make','plan'].includes(w));
     const allTopics=topics();
     const ranked=allTopics.map(x=>{const hay=(core.subjectLabel(x.s)+' '+x.h+' '+x.t.title).toLowerCase();const score=words.reduce((n,w)=>n+(hay.includes(w)?1:0),0);return {x,score};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
-    const broad=/all topics|entire syllabus|whole syllabus|complete .*subject|finish .*subject/.test(q);
+    const subjectWide=/complete .*subject|finish .*subject|entire .*subject|whole .*subject/.test(q);
+    const broad=/all topics|entire syllabus|whole syllabus/.test(q);
     const needsTopics=/topic|syllabus|complete|finish|reopen|mark|planner|schedule|timetable|revise|revision|study plan/.test(q)||ranked.length>0;
-    const selectedTopics=broad?allTopics.slice(0,60):(needsTopics?ranked.slice(0,45).map(x=>x.x):[]);
+    const subjectMatch=core.subjects().find(sub=>q.includes(core.subjectLabel(sub).toLowerCase())||q.includes(String(sub).toLowerCase()));
+    const subjectScoped=subjectMatch?allTopics.filter(x=>x.s===subjectMatch):[];
+    const selectedTopics=subjectWide?[]:(subjectScoped.length?subjectScoped:(broad?allTopics:(needsTopics?ranked.slice(0,220).map(x=>x.x):[])));
     const catalog=selectedTopics.map(x=>[x.k,core.subjectLabel(x.s),String(x.t.title||''),!!s.done[x.k]]);
     const plannerQuery=/planner|schedule|timetable|tasks|study plan|revision plan|available time/.test(q);
     const days=Object.entries(s.planner?.days||{}).slice(plannerQuery?-14:-5).map(([date,p])=>({date,tasks:(p?.tasks||[]).slice(0,12).map(t=>({id:t.id,title:t.title,type:t.type,topicKey:t.topicKey,minutes:t.minutes,done:!!s.planner?.completed?.[t.id]}))}));
-    return {...buildContextBase(base,s),topicCatalog:catalog,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})}};
+    const capabilityState={exams:(s.exams||[]).map(x=>({id:x.id,name:x.name,date:x.date,subjects:x.subjects||[]})),assessments:(s.assessments||[]).slice(-12).map(x=>({id:x.id,name:x.name,date:x.date,subject:x.subject,score:x.score,total:x.total,topicKey:x.topicKey})),quickItems:(s.quickItems||[]).filter(x=>!x.done).slice(0,20).map(x=>({id:x.id,title:x.title,date:x.date,type:x.type,topicKey:x.topicKey})),revisionSettings:s.revision?.settings||{},revisionEligibility:s.revision?.eligibility||{}};
+    return {...buildContextBase(base,s),topicCatalog:catalog,topicCatalogCount:allTopics.length,topicCatalogScope:subjectMatch?core.subjectLabel(subjectMatch):(broad?'whole syllabus':subjectWide?'subject action':'relevant matches'),capabilities:['topic completion and reopening','daily and weekly goals','planner tasks and settings','revision eligibility and queue','Topic Hub notes and favourites','examinations','assessments and mistake workflow','quick capture'],capabilityState,planner:{availableMinutes:s.planner?.availableMinutes||240,newLimit:s.planner?.newLimit||5,prioritySubject:s.planner?.prioritySubject||'',days},dailyGoal:{date:s.goalDate,targetSet:!!s.targetSet,todayTarget:s.todayTarget||0,goalTotal:s.goalTotal||0,completedGoal:s.completedGoal||0,backlog:s.backlog||0},userGoals:{...(s.userGoals||{})}};
   }
   function buildContextBase(z,s) {
     return {today:today(),syllabus:{completed:z.done.length,pending:z.pending.length,total:z.all.length},backlog:s.backlog||0,subjects:z.subjects.map(x=>({subject:core.subjectLabel(x.sub),completed:x.done,total:x.total})),revisionDue:z.due.length,unresolvedMistakes:z.openMistakes.length,recentStudyMinutes:z.recentMinutes,recentTopicsCompleted:z.completedThisWeek,weeklyGoals:{minutes:z.goalMinutes,topics:z.goalTopics},upcomingExams:z.exams.slice(0,3).map(x=>({name:x.name,date:x.date,daysRemaining:x.days,subjects:x.subjects})),availableMinutes:s.planner?.availableMinutes||240,topLocalRecommendations:z.rec.map(x=>({title:x.title,reason:x.body}))};
   }
   // Single cloud AI provider. No local model, provider switch, or manual model selector.
   const assistantMode=$('assistantMode');
-  if(assistantMode)assistantMode.textContent='Cloud AI · Llama 3.3 70B Fast';
+  if(assistantMode)assistantMode.textContent='Cloud AI · GLM-4.7-Flash';
     async function sendAssistantMessage() {
     const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
     const chat=ensureAssistantChat(), now=new Date().toISOString();
@@ -531,17 +585,19 @@
       chat.aiDigest=older.map(m=>(m.role==='user'?'User: ':'Assistant: ')+String(m.content||'').replace(/\s+/g,' ').slice(0,150)).join('\n').slice(0,1000);
       const conversation=completeHistory.slice(-8).map(m=>({role:m.role,content:String(m.content||'').slice(-1200),createdAt:m.createdAt||null}));
       const result=await core.askAI(promptText,{conversation,conversationSummary:chat.aiDigest||'',tracker:trackerContext});
-      pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
+      pending.pending=false;pending.model=result.model||'Model not reported';pending.content=result.reply||'I could not generate a response.';
       const receivedActions=Array.isArray(result.actions)?result.actions:[];
       const normalizedActions=receivedActions.map(normalizeAssistantAction).filter(Boolean);
-      pending.actions=normalizedActions.filter(validateAssistantAction).slice(0,8);
+      pending.actions=normalizedActions.filter(validateAssistantAction).slice(0,20);
       const requestedChange=/\b(mark|complete|finish|reopen|set|change|update|add|remove|delete|schedule|create|put)\b/i.test(promptText) && /\b(topic|syllabus|goal|planner|task|schedule|target|revision|study plan|tracker)\b/i.test(promptText);
       if(requestedChange && pending.actions.length===0){
         pending.content += '\n\n**No tracker change was made.** I could not prepare a valid, verifiable action for this request. Please specify the exact topic or setting you want changed; I will show a review button before anything is saved.';
       } else if(receivedActions.length && pending.actions.length===0){
         pending.content += '\n\n**No tracker change was made.** The proposed action did not pass the app’s safety checks.';
       }
-      $('assistantMode').textContent='Cloud AI · '+(String(result.model||'').includes('glm-4.7-flash')?'GLM-4.7-Flash':'Cloud AI');
+      const returnedModel=assistantModelLabel(result.model);
+      $('assistantMode').textContent='Cloud AI · '+(returnedModel==='Unverified model'?'Model unverified':returnedModel);
+      pending.model=result.model||'Model not reported';
     } catch(err) {
       pending.pending=false;pending.model='Cloud AI unavailable';pending.content='I could not reach the cloud study assistant. No tracker changes were made.\n\n**Error:** '+(err.message||'Request failed')+'\n\nPlease check your internet connection and sign-in, then retry.';pending.actions=[];$('assistantMode').textContent='Cloud AI unavailable';
     } finally {

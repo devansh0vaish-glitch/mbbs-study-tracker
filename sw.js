@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mbbs-v36-shell-11-glm-ui-actions';
+const CACHE_NAME = 'mbbs-integrated-v52-shell-1';
 const CORE_ASSETS = [
   './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js',  'ai-provider.js',
   'syllabus.js', 'manifest.json',

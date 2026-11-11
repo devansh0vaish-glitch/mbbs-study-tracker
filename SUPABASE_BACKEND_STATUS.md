@@ -1,13 +1,5 @@
 # Supabase backend status
 
-The live `study-assistant` Supabase Edge Function was deployed separately and verified active at version 39.
+This ZIP contains the integrated v52 source for `study-assistant`. It uses Cloudflare Workers AI model `@cf/zai-org/glm-4.7-flash`, authenticates the caller through Supabase Auth, restricts browser origin, and proposes tracker actions for frontend validation/confirmation.
 
-- Project ref: `rnjmgtttujzfjonvnaae`
-- Function: `study-assistant`
-- Cloud default model: `@cf/zai-org/glm-4.7-flash`
-- Supports account-scoped text-generation model catalogue lookup (`action: "list_models"`)
-- Supports passing a selected model in `context.aiModel`
-- Uses a medical-study system prompt and validates the response envelope.
-- The frontend requires this live version for cloud model catalogue and manual selection.
-
-The original ZIP contained an older function source snapshot. It is not copied into this upgraded package because redeploying it would downgrade the live function. Keep the currently deployed Supabase function version 39.
+**Deployment status: not deployed by packaging this ZIP.** Deploy `supabase/functions/study-assistant/index.ts` to the existing Supabase project separately, then verify the active function version. The GitHub Pages frontend also needs to be updated from this ZIP.

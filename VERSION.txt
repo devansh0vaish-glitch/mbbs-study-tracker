@@ -1,5 +1,5 @@
-MBBS Study Tracker V36
-Cloud AI model: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash)
-Supabase study-assistant deployment: v48
-Assistant UI: Markdown tables, code, blockquotes, rules, responsive chat
-Tracker actions: normalized schema, validation feedback, confirmation before writes
+MBBS Study Tracker — Integrated Upgrade v52
+
+Includes the existing tracker modules (syllabus, daily goals, revision, history, settings/admin, planner, focus timer, Topic Hub, analytics, exams, assessments, AI assistant and quick capture), expanded AI proposal support for these user-level workflows, richer scoped tracker context, fixed GLM-4.7-Flash labeling, and updated PWA cache.
+
+AI changes are proposals only: the frontend validates and asks for confirmation before applying. Supabase function source is included but deployment is separate and is not claimed by this ZIP.
