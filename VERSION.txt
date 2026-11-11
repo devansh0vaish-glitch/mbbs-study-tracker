@@ -1,4 +1,4 @@
 MBBS Study Tracker V36
-Cross-device AI upgrade
-WebLLM 0.2.87 | Qwen3.5/Gemma 4/Phi-4/Llama model catalogue
-Local-first, optional consent-based Gemini cloud fallback
+Cloudflare Workers AI integration update
+Backend function: study-assistant (Supabase Edge Function v28)
+Primary cloud model: @cf/meta/llama-3.3-70b-instruct-fp8-fast

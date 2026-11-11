@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mbbs-v36-shell-7';
+const CACHE_NAME = 'mbbs-v36-shell-8-cloudflare';
 const CORE_ASSETS = [
   './', 'index.html', 'style.css', 'v36.css', 'app.js', 'v36.js', 'local-llm.js', 'ai-provider.js',
   'syllabus.js', 'manifest.json',

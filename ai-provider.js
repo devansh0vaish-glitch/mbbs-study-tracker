@@ -4,8 +4,15 @@
   const MODE_KEY='MBBS_AI_PROVIDER_MODE';
   const CONSENT_KEY='MBBS_AI_CLOUD_CONSENT';
   const config=window.MBBS_AI_CONFIG=window.MBBS_AI_CONFIG||{};
-  config.mode=localStorage.getItem(MODE_KEY)||'local';
-  config.cloudConsent=localStorage.getItem(CONSENT_KEY)==='yes';
+  const savedMode=localStorage.getItem(MODE_KEY);
+  // Cloudflare is the requested primary provider. Migrate the old default-local setting once.
+  config.mode=!savedMode||savedMode==='local'?'cloud':savedMode;
+  if(config.mode!==savedMode)localStorage.setItem(MODE_KEY,config.mode);
+  // The user explicitly selected relevant tracker-context sharing for Cloud AI in setup.
+  // Preserve any explicit in-app opt-out.
+  const savedConsent=localStorage.getItem(CONSENT_KEY);
+  config.cloudConsent=savedConsent==='no'?false:true;
+  if(savedConsent===null)localStorage.setItem(CONSENT_KEY,'yes');
   const adapters=new Map();
   function setMode(mode){if(!['local','cloud','hybrid'].includes(mode))throw new Error('Unknown AI provider mode.');config.mode=mode;localStorage.setItem(MODE_KEY,mode);}
   function setCloudConsent(allowed){config.cloudConsent=!!allowed;localStorage.setItem(CONSENT_KEY,allowed?'yes':'no');}

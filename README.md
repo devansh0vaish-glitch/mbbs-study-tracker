@@ -76,3 +76,18 @@ JavaScript syntax checks and ZIP integrity checks are run for this build. The Su
 
 ## AI engine disposal fix
 This build prevents unloading or switching a local model while inference is active, blocks overlapping local requests, and invalidates a disposed WebLLM engine with a clear reload instruction. The service-worker cache version is bumped so the updated runtime can be fetched.
+
+
+## iPadOS 27.2 Safari prompt-prefill stability update
+
+- Reduces local prompt budget to approximately 620 estimated tokens and output to 320 tokens to avoid large single-pass prompt prefill on Safari.
+- Trims transcript and tracker context more aggressively on mobile.
+- Detects WebGPU/device-loss errors, clears the invalid engine, and surfaces the original runtime error.
+- Bumps the service-worker cache to `mbbs-v36-shell-7`.
+
+This is a mitigation, not a guarantee: Safari may still lose its WebGPU device for reasons unrelated to prompt length.
+
+
+## Cloudflare Workers AI (online provider)
+
+See [CLOUDFLARE_AI_SETUP.md](CLOUDFLARE_AI_SETUP.md) for the secure Supabase gateway, selected model, free-tier limits, and one-time secret setup. The browser never contains the Cloudflare API token.

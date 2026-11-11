@@ -6,8 +6,8 @@
   'use strict';
   const CDN = 'https://esm.run/@mlc-ai/web-llm@0.2.87';
   const KEY = 'MBBS_LOCAL_LLM_MODEL';
-  const INPUT_BUDGET = 2700; // conservative budget inside the model's 4K window
-  const OUTPUT_BUDGET = 900;
+  const INPUT_BUDGET = 620; // Safari iOS 27.2 workaround: keep prefill well below the reported ~900-token GPU crash threshold
+  const OUTPUT_BUDGET = 320; // lower decode pressure on mobile Safari
   const state = { module: null, engine: null, modelId: '', loading: false, activeRequests: 0, progress: '', supported: null, modelInfo: null };
   const listeners = new Set();
   const SYSTEM = `You are the AI study assistant embedded in an MBBS study tracker. Answer academic and study-workflow questions clearly and accurately. Use only supplied tracker facts; never invent topic keys, dates, subject names, completion states or task IDs. You may propose tracker changes using the action schema below. The app validates every action and requires explicit user confirmation before writing. Never claim a change is already applied. Return ONLY a valid JSON object: {"reply":"Markdown response","actions":[]}. Allowed actions: {"type":"complete_topics","topicKeys":["exact topicKey"]}; {"type":"set_topic_completion","topicKey":"exact topicKey","completed":true|false}; {"type":"set_daily_goal","target":integer 1-100}; {"type":"update_user_goals","weeklyMinutes":number,"weeklyTopics":number}; {"type":"add_planner_tasks","tasks":[{"date":"YYYY-MM-DD","topicKey":"exact topicKey","type":"study|revision","minutes":30}]}; {"type":"remove_planner_tasks","taskIds":["exact id"]}; {"type":"update_planner_settings","availableMinutes":240,"newLimit":5,"prioritySubject":"exact subject"}. Only propose actions when the user clearly requests a data change. For advice, explanations and recommendations, actions must be []. If unclear, ask one concise question and return actions []. Dates must be today or later. Do not exceed 30 topic completions, 14 planner tasks or 30 deletions. Weekly minutes 60-10080 and weekly topics 1-300. A set_daily_goal changes the target, not topic completion. You are an academic study assistant, not a patient-care decision tool; do not provide patient-specific diagnosis or treatment advice.`;
@@ -47,26 +47,37 @@
   }
   function estimateTokens(value){return Math.ceil(String(value||'').length/3.5);}
   function buildMessages({message,context}){
+    // Keep the single prefill submission deliberately small. Safari on iOS/iPadOS
+    // 27.2 has a reported WebGPU GPU-process crash around ~900 prompt tokens.
     const tracker={...(context?.tracker||{})};
-    if(Array.isArray(tracker.topicCatalog))tracker.topicCatalog=tracker.topicCatalog.slice(0,45);
+    if(Array.isArray(tracker.topicCatalog))tracker.topicCatalog=tracker.topicCatalog.slice(0,8);
+    const userText=String(message||'').slice(-700);
     const conversation=(Array.isArray(context?.conversation)?context.conversation:[])
       .filter(m=>(m.role==='user'||m.role==='assistant')&&typeof m.content==='string')
-      .slice(-6).map(m=>({role:m.role,content:m.content.slice(-900)}));
-    if(!conversation.length||conversation[conversation.length-1]?.content!==message)conversation.push({role:'user',content:String(message||'').slice(-1800)});
-    const digest=String(context?.conversationSummary||'').slice(0,900);
-    const systemContent=SYSTEM+(digest?'\n\nEarlier conversation notes (extracts; use only as context):\n'+digest:'')+'\n\nTRACKER STATE (compact JSON):\n'+JSON.stringify(tracker);
-    const messages=[{role:'system',content:systemContent},...conversation];
-    const count=()=>messages.reduce((n,m)=>n+estimateTokens(m.content)+8,0);
+      .slice(-2).map(m=>({role:m.role,content:m.content.slice(-280)}));
+    if(!conversation.length||conversation[conversation.length-1]?.content!==userText){
+      conversation.push({role:'user',content:userText});
+    }
+    // Do not duplicate a large transcript into the prompt on mobile Safari.
+    const systemBase=SYSTEM.replace(/Allowed actions:[\s\S]*?Dates must be today or later\./,
+      'Allowed actions: complete_topics(topicKeys); set_topic_completion(topicKey,completed); set_daily_goal(target 1-100); update_user_goals(weeklyMinutes,weeklyTopics); add_planner_tasks(tasks); remove_planner_tasks(taskIds); update_planner_settings(availableMinutes,newLimit,prioritySubject). Dates must be today or later.');
+    const digest=String(context?.conversationSummary||'').slice(0,240);
+    const makeSystem=(stateObj,withDigest)=>systemBase+(withDigest&&digest?'\nEarlier notes: '+digest:'')+'\nTRACKER STATE (JSON):\n'+JSON.stringify(stateObj);
+    let messages=[{role:'system',content:makeSystem(tracker,true)},...conversation];
+    const count=()=>messages.reduce((n,m)=>n+estimateTokens(m.content)+6,0);
     while(count()>INPUT_BUDGET&&messages.length>2)messages.splice(1,1);
-    if(count()>INPUT_BUDGET&&Array.isArray(tracker.topicCatalog)){
-      tracker.topicCatalog=tracker.topicCatalog.slice(0,12);
-      messages[0].content=SYSTEM+'\n\nTRACKER STATE (compact JSON):\n'+JSON.stringify(tracker);
+    if(count()>INPUT_BUDGET){
+      const minimal={today:tracker.today,subjects:tracker.subjects,revisionDue:tracker.revisionDue,dailyGoal:tracker.dailyGoal,weeklyGoals:tracker.weeklyGoals};
+      messages[0].content=makeSystem(minimal,false);
     }
     if(count()>INPUT_BUDGET){
-      const minimal={today:tracker.today,syllabus:tracker.syllabus,subjects:tracker.subjects,revisionDue:tracker.revisionDue,weeklyGoals:tracker.weeklyGoals,dailyGoal:tracker.dailyGoal};
-      messages[0].content=SYSTEM+'\n\nTRACKER SUMMARY:\n'+JSON.stringify(minimal);
+      messages[0].content=systemBase+'\nTRACKER STATE: '+JSON.stringify({today:tracker.today,dailyGoal:tracker.dailyGoal});
     }
-    if(count()>INPUT_BUDGET)throw new Error('This question and its recent context still exceed the local model budget. Start a new chat or shorten the pasted text.');
+    if(count()>INPUT_BUDGET){
+      // Last-resort cap: preserve the latest user request and safety rules.
+      messages=[{role:'system',content:systemBase+'\nUse no tracker facts unless supplied in the current message.'},{role:'user',content:userText.slice(-320)}];
+    }
+    if(count()>INPUT_BUDGET)throw new Error('The prompt is too long for stable inference in iPad Safari. Shorten the request and try again.');
     return messages;
   }
   async function load(modelId,onProgress){
@@ -117,10 +128,10 @@
       return parseOutput(result.choices?.[0]?.message?.content||'');
     }catch(error){
       const detail=String(error?.message||error);
-      if(/disposed|dispose|worker.*terminated|device.*lost/i.test(detail)){
+      if(/disposed|dispose|worker.*terminated|device.*lost|GPUDevice|GPU device|mapAsync|WebGPU.*lost|device was lost/i.test(detail)){
         if(state.engine===engine){state.engine=null;state.modelId='';state.modelInfo=null;}
-        state.progress='The WebLLM engine was disposed. Reload the model before asking another question.';emit();
-        throw new Error('The local AI engine was disposed by the browser/runtime. Open AI settings, reload the model, and try again. Your tracker data was not changed.');
+        state.progress='Safari/WebGPU lost the GPU device during inference. The local engine was cleared; cached weights are retained.';emit();
+        throw new Error('Safari lost the WebGPU device during model execution. This is consistent with a reported iOS 27.2 Safari GPU-process crash during large prompt prefill. The tracker data was not changed. The prompt is now capped more aggressively; if this still happens, use cloud AI on this iPad until Safari/runtime support is fixed. Original runtime error: '+detail.slice(0,260));
       }
       throw error;
     }finally{state.activeRequests=Math.max(0,state.activeRequests-1);emit();}
