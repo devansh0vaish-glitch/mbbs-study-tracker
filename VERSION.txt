@@ -1,4 +1,5 @@
 MBBS Study Tracker V36
-Cloudflare Workers AI integration update
-Backend function: study-assistant (Supabase Edge Function v28)
-Primary cloud model: @cf/meta/llama-3.3-70b-instruct-fp8-fast
+Cloud AI model: GLM-4.7-Flash (@cf/zai-org/glm-4.7-flash)
+Supabase study-assistant deployment: v48
+Assistant UI: Markdown tables, code, blockquotes, rules, responsive chat
+Tracker actions: normalized schema, validation feedback, confirmation before writes

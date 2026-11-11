@@ -2,7 +2,7 @@
 
 ## AI architecture
 - The app uses one cloud AI provider: Cloudflare Workers AI through the authenticated Supabase `study-assistant` Edge Function.
-- Fixed model: `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (GLM-4.7-Flash).
+- Fixed model: `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (Llama 3.3 70B Fast).
 - There is no on-device AI runtime, WebGPU dependency, local model download, provider switch, or manual model selector.
 - `local-llm.js` has been removed.
 - Prompts and a compact, relevant tracker context are sent to the cloud function. The app requires a valid Supabase sign-in.
@@ -18,7 +18,7 @@
 - JWT verification: enabled
 - Required Supabase Edge Function secrets: `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 - Do not place Cloudflare credentials in frontend files.
-- The deployed function was restored as version 44 and uses GLM-4.7-Flash. The source in `supabase/functions/study-assistant/index.ts` is included for project maintenance; check the deployed source before redeploying if the backend has been changed independently.
+- The deployed function was restored as version 44 and uses Llama 3.3 70B Fast. The source in `supabase/functions/study-assistant/index.ts` is included for project maintenance; check the deployed source before redeploying if the backend has been changed independently.
 
 ## Deployment
 Upload the updated project files to the repository's `main` branch and allow GitHub Pages to rebuild. The service-worker cache name was incremented so clients fetch the new shell. If the installed PWA still shows old code, close it completely and reopen the site once online.

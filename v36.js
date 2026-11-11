@@ -50,11 +50,11 @@
       <div class="v36-card"><h3>Record a test</h3><div class="v36-formgrid"><label>Test name<input id="testName" placeholder="e.g. Marrow GT 01"></label><label>Date<input id="testDate" type="date"></label><label>Subject<select id="testSubject"></select></label><label>Marks obtained<input id="testScore" type="number" min="0" step="any"></label><label>Total marks<input id="testTotal" type="number" min="1" step="any"></label></div><label>Mistake category<select id="testMistakeType"><option value="knowledge">Knowledge gap</option><option value="conceptual">Conceptual error</option><option value="memory">Memory error</option><option value="misinterpretation">Misinterpretation</option><option value="careless">Careless / silly mistake</option></select></label><label>Test notes / mistakes<textarea id="testMistakes" rows="3" placeholder="What went wrong? Which concepts need work?"></textarea></label><label>Link a syllabus topic<select id="testTopic"><option value="">No linked topic</option></select></label><button class="v36-btn primary" id="saveTest">Save assessment</button></div>
       <div class="v36-grid"><div class="v36-card"><h3>Performance summary</h3><div id="testSummary"></div></div><div class="v36-card"><h3>Score trend</h3><div id="testTrend"></div></div></div>
       <div class="v36-card"><h3>Assessment history</h3><div id="testHistory"></div></div>`,
-    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Your MBBS tutor and tracker assistant, powered by one secure cloud model.</p></div><span class="v36-pill" id="assistantMode">Cloud AI · GLM-4.7-Flash</span></div>
+    assistant: `<div class="v36-pagehead"><div><p class="eyebrow">YOUR STUDY COPILOT</p><h2>Study Assistant</h2><p class="muted">Your MBBS tutor and tracker assistant, powered by one secure cloud model.</p></div><span class="v36-pill" id="assistantMode">Cloud AI · Llama 3.3 70B Fast</span></div>
       <div class="v36-chat-shell">
         <aside class="v36-chat-sidebar">
           <button type="button" class="v36-btn primary v36-new-chat" id="assistantNewChat">＋ New chat</button>
-          <div class="v36-cloud-info"><div class="v36-cloud-mark">✦</div><div><b>Cloud AI</b><small>GLM-4.7-Flash</small></div><span class="v36-online-dot"></span><p>Your prompts and relevant tracker context are securely sent through Supabase to Cloudflare Workers AI. Sign-in and internet access are required.</p></div>
+          <div class="v36-cloud-info"><div class="v36-cloud-mark">✦</div><div><b>Cloud AI</b><small>Llama 3.3 70B Fast</small></div><span class="v36-online-dot"></span><p>Your prompts and relevant tracker context are securely sent through Supabase to Cloudflare Workers AI. Sign-in and internet access are required.</p></div>
           <div class="v36-chat-list" id="assistantChatList" aria-label="Chat history"></div>
           <p class="v36-chat-privacy">One model for every conversation. Chat history syncs through your Supabase account.</p>
         </aside>
@@ -375,9 +375,16 @@
       const lines=blocks[i].split('\n');let j=0;
       while(j<lines.length){
         if(!lines[j].trim()){j++;continue;}
-        if(lines[j].trim().startsWith('|')){
-          const table=[];while(j<lines.length&&lines[j].trim().startsWith('|'))table.push(lines[j++]);
+        const tableCandidate = line => line.includes('|') && line.trim().split('|').length >= 2;
+        const tableSeparator = line => tableCandidate(line) && line.trim().replace(/^\||\|$/g,'').split('|').every(c=>/^\s*:?-{3,}:?\s*$/.test(c));
+        if(tableCandidate(lines[j]) && j+1<lines.length && tableSeparator(lines[j+1])){
+          const table=[];while(j<lines.length&&tableCandidate(lines[j]))table.push(lines[j++]);
           const tableHtml=renderAssistantTable(table);out+=tableHtml||`<p>${table.map(assistantInline).join('<br>')}</p>`;continue;
+        }
+        if(/^\s*(---+|___+|\*\*\*+)\s*$/.test(lines[j])){out+='<hr class="v36-ai-rule">';j++;continue;}
+        if(/^\s*>\s?/.test(lines[j])){
+          const quote=[];while(j<lines.length&&/^\s*>\s?/.test(lines[j]))quote.push(assistantInline(lines[j++].replace(/^\s*>\s?/,'')));
+          out+=`<blockquote class="v36-ai-quote">${quote.join('<br>')}</blockquote>`;continue;
         }
         const line=lines[j];
         const heading=line.match(/^(#{1,4})\s+(.+)$/);
@@ -399,7 +406,7 @@
   function renderAssistant() {
     const chat=ensureAssistantChat(), list=$('assistantChatList'), messages=$('assistantMessages');
     $('assistantChatTitle').textContent=chat.title || 'New conversation';
-    $('assistantMode').textContent='Cloud AI · GLM-4.7-Flash';
+    $('assistantMode').textContent='Cloud AI · Llama 3.3 70B Fast';
     list.innerHTML=state().assistantChats.map(c=>`<div class="v36-chat-row ${c.id===chat.id?'active':''}"><button class="v36-chat-select" type="button" data-chat-open="${esc(c.id)}"><b>${esc(c.title||'New conversation')}</b><small>${esc((c.messages||[]).filter(m=>m.role==='user').at(-1)?.content?.slice(0,58)||'No messages yet')}</small></button><div class="v36-chat-actions"><button type="button" class="v36-mini" title="Rename chat" data-chat-rename="${esc(c.id)}">✎</button><button type="button" class="v36-mini danger" title="Delete chat" data-chat-delete="${esc(c.id)}">×</button></div></div>`).join('') || '<p class="v36-empty">Your conversations will appear here.</p>';
     messages.innerHTML=(chat.messages||[]).map((m,i)=>{
       const role=m.role==='user'?'user':'assistant';
@@ -434,6 +441,26 @@
     if(a.type==='add_planner_tasks')return `Add ${a.tasks?.length||0} task(s) to the planner`;
     if(a.type==='update_planner_settings')return `Update planner settings${a.availableMinutes?` · ${a.availableMinutes} min/day`:''}`;
     return 'Unrecognised tracker action';
+  }
+  function normalizeAssistantAction(raw) {
+    if(!raw||typeof raw!=='object')return null;
+    let nested=raw.args;
+    if(typeof nested==='string'){try{nested=JSON.parse(nested)}catch{nested={}}}
+    const a={...raw,...(nested&&typeof nested==='object'?nested:{})};
+    a.type=a.type||a.action||a.name||raw.tool;
+    const aliases={completeTopics:'complete_topics',setTopicCompletion:'set_topic_completion',setDailyGoal:'set_daily_goal',updateUserGoals:'update_user_goals',addPlannerTasks:'add_planner_tasks',removePlannerTasks:'remove_planner_tasks',updatePlannerSettings:'update_planner_settings'};
+    a.type=aliases[a.type]||a.type;
+    if(a.topic_keys&&!a.topicKeys)a.topicKeys=a.topic_keys;
+    if(a.task_ids&&!a.taskIds)a.taskIds=a.task_ids;
+    if(a.topic_key&&!a.topicKey)a.topicKey=a.topic_key;
+    if(a.weekly_minutes!==undefined&&a.weeklyMinutes===undefined)a.weeklyMinutes=a.weekly_minutes;
+    if(a.weekly_topics!==undefined&&a.weeklyTopics===undefined)a.weeklyTopics=a.weekly_topics;
+    if(a.available_minutes!==undefined&&a.availableMinutes===undefined)a.availableMinutes=a.available_minutes;
+    if(a.new_limit!==undefined&&a.newLimit===undefined)a.newLimit=a.new_limit;
+    if(a.priority_subject!==undefined&&a.prioritySubject===undefined)a.prioritySubject=a.priority_subject;
+    if(a.type==='complete_topics'&&!a.topicKeys&&Array.isArray(a.topics))a.topicKeys=a.topics;
+    if(a.type==='add_planner_tasks'&&Array.isArray(a.tasks))a.tasks=a.tasks.map(t=>({...t,topicKey:t.topicKey||t.topic_key,date:t.date||t.day,minutes:Number(t.minutes||t.durationMinutes||t.duration_minutes),type:t.type||'study'}));
+    return a;
   }
   function validateAssistantAction(a) {
     if(!a||typeof a!=='object')return false;
@@ -488,7 +515,7 @@
   }
   // Single cloud AI provider. No local model, provider switch, or manual model selector.
   const assistantMode=$('assistantMode');
-  if(assistantMode)assistantMode.textContent='Cloud AI · GLM-4.7-Flash';
+  if(assistantMode)assistantMode.textContent='Cloud AI · Llama 3.3 70B Fast';
     async function sendAssistantMessage() {
     const input=$('assistantPrompt'), promptText=input.value.trim(); if(!promptText)return;
     const chat=ensureAssistantChat(), now=new Date().toISOString();
@@ -505,8 +532,16 @@
       const conversation=completeHistory.slice(-8).map(m=>({role:m.role,content:String(m.content||'').slice(-1200),createdAt:m.createdAt||null}));
       const result=await core.askAI(promptText,{conversation,conversationSummary:chat.aiDigest||'',tracker:trackerContext});
       pending.pending=false;pending.model=result.model||result.provider||'AI';pending.content=result.reply||'I could not generate a response.';
-      pending.actions=Array.isArray(result.actions)?result.actions.filter(validateAssistantAction).slice(0,8):[];
-      $('assistantMode').textContent='Cloud AI · '+(result.model?.includes('glm-4.7-flash')?'GLM-4.7-Flash':'ready');
+      const receivedActions=Array.isArray(result.actions)?result.actions:[];
+      const normalizedActions=receivedActions.map(normalizeAssistantAction).filter(Boolean);
+      pending.actions=normalizedActions.filter(validateAssistantAction).slice(0,8);
+      const requestedChange=/\b(mark|complete|finish|reopen|set|change|update|add|remove|delete|schedule|create|put)\b/i.test(promptText) && /\b(topic|syllabus|goal|planner|task|schedule|target|revision|study plan|tracker)\b/i.test(promptText);
+      if(requestedChange && pending.actions.length===0){
+        pending.content += '\n\n**No tracker change was made.** I could not prepare a valid, verifiable action for this request. Please specify the exact topic or setting you want changed; I will show a review button before anything is saved.';
+      } else if(receivedActions.length && pending.actions.length===0){
+        pending.content += '\n\n**No tracker change was made.** The proposed action did not pass the app’s safety checks.';
+      }
+      $('assistantMode').textContent='Cloud AI · '+(String(result.model||'').includes('glm-4.7-flash')?'GLM-4.7-Flash':'Cloud AI');
     } catch(err) {
       pending.pending=false;pending.model='Cloud AI unavailable';pending.content='I could not reach the cloud study assistant. No tracker changes were made.\n\n**Error:** '+(err.message||'Request failed')+'\n\nPlease check your internet connection and sign-in, then retry.';pending.actions=[];$('assistantMode').textContent='Cloud AI unavailable';
     } finally {

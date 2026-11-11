@@ -139,3 +139,19 @@ header{position:sticky;top:0;z-index:100;isolation:isolate;padding-top:env(safe-
  .v36-chat-messages{min-height:42vh;max-height:55vh}
  .v36-chat-composer{position:sticky;bottom:0;background:var(--v36-panel);z-index:3;padding-bottom:env(safe-area-inset-bottom)}
 }
+
+/* Assistant response formatting and narrow-screen resilience */
+.v36-message-content{min-width:0;overflow-wrap:anywhere;word-break:normal}
+.v36-message-content h2{font-size:17px;line-height:1.3;margin:15px 0 7px;color:var(--v36-ink)}
+.v36-message-content h5{font-size:12px;margin:10px 0 5px}
+.v36-message-content ol{padding-left:23px;margin:7px 0}
+.v36-message-content pre.v36-ai-code{display:block;max-width:100%;white-space:pre;overflow-x:auto;overflow-y:hidden;tab-size:2}
+.v36-message-content pre code{background:transparent;padding:0;border-radius:0}
+.v36-message-content blockquote.v36-ai-quote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--v36-accent);background:var(--v36-panel);border-radius:0 8px 8px 0;color:var(--v36-muted)}
+.v36-message-content hr.v36-ai-rule{border:0;border-top:1px solid var(--v36-line);margin:13px 0}
+.v36-ai-table-wrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.v36-ai-table{width:max-content;min-width:100%;max-width:none}
+.v36-ai-table th,.v36-ai-table td{min-width:100px;white-space:normal;overflow-wrap:anywhere}
+.v36-chat-messages{min-width:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.v36-chat-main,.v36-chat-shell{min-width:0}
+@media(max-width:700px){.v36-message{margin-left:0!important;margin-right:0!important;padding:11px 12px}.v36-chat-messages{padding:12px 9px;max-height:62vh;min-height:300px}.v36-ai-table{font-size:11px}.v36-ai-table th,.v36-ai-table td{padding:7px 8px}}
